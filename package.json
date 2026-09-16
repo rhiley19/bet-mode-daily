@@ -1,0 +1,13 @@
+{
+  "name": "bet-mode-daily",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "netlify dev",
+    "check": "node --check netlify/functions/_shared.mjs && node --check netlify/functions/daily-picks.mjs && node --check netlify/functions/bet-check.mjs && node --check netlify/functions/health.mjs && node --check app.js"
+  },
+  "devDependencies": {
+    "netlify-cli": "^23.9.0"
+  }
+}

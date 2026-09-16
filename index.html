@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#07110c" />
+  <meta name="description" content="BET MODE — disciplined daily sports betting research for Ontario." />
+  <title>BET MODE — Daily Betting Research</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="noise"></div>
+  <div class="shell">
+    <header class="topbar">
+      <button class="brand reset-button" data-view-target="daily" aria-label="Open daily card">
+        <span class="brand-mark">BM</span>
+        <span class="brand-copy"><strong>BET MODE</strong><small>Research desk</small></span>
+      </button>
+
+      <nav class="nav-tabs" aria-label="Main navigation">
+        <button class="nav-tab active" data-view-target="daily">Daily Card</button>
+        <button class="nav-tab" data-view-target="check">Bet Check</button>
+        <button class="nav-tab" data-view-target="results">Results</button>
+      </nav>
+
+      <button id="statusPill" class="status-pill" type="button" aria-expanded="false">
+        <span class="dot" id="statusDot"></span>
+        <span id="statusText">Checking engine…</span>
+      </button>
+    </header>
+
+    <aside id="setupPanel" class="setup-panel hidden">
+      <div>
+        <strong>Connection setup</strong>
+        <p>Add <code>ODDS_API_KEY</code> and <code>OPENAI_API_KEY</code> in Netlify → Site configuration → Environment variables.</p>
+      </div>
+      <div id="setupDetails" class="setup-details"></div>
+    </aside>
+
+    <main>
+      <section id="dailyView" class="view active-view">
+        <section class="hero">
+          <div class="hero-copy">
+            <div class="eyebrow">ONTARIO · CAD · FANDUEL-FIRST</div>
+            <h1>Find the price.<br><span>Then earn the opinion.</span></h1>
+            <p>BET MODE checks the slate, compares real market prices, researches current context, rejects weak bets and builds the card only after the singles clear the filter.</p>
+            <div class="trust-row">
+              <span>✓ Live reference odds</span>
+              <span>✓ Current web research</span>
+              <span>✓ No invented lines</span>
+            </div>
+          </div>
+          <div class="hero-console">
+            <div class="console-top"><span>BET MODE PRINCIPLE</span><span class="live-dot">LIVE</span></div>
+            <div class="console-value">NO LOCKS</div>
+            <p>Likely does not automatically mean valuable.</p>
+            <div class="console-rule"><span>Probability</span><b>≠</b><span>Price</span></div>
+          </div>
+        </section>
+
+        <section class="command-bar">
+          <div class="sport-wrap">
+            <div class="field-label">SPORT</div>
+            <div class="sports" id="sports">
+              <button class="sport active" data-sport="MLB">MLB</button>
+              <button class="sport" data-sport="NFL">NFL</button>
+              <button class="sport" data-sport="NHL">NHL</button>
+              <button class="sport" data-sport="NBA">NBA</button>
+              <button class="sport" data-sport="UCL">UCL</button>
+              <button class="sport" data-sport="EPL">EPL</button>
+              <button class="sport" data-sport="LALIGA">La Liga</button>
+            </div>
+          </div>
+          <div class="command-actions">
+            <label class="input-shell"><span>Budget</span><b>$</b><input id="budget" type="number" min="0" step="5" value="50" inputmode="decimal"></label>
+            <label class="select-shell"><span>Risk</span><select id="riskProfile"><option value="conservative">Conservative</option><option value="balanced" selected>Balanced</option><option value="aggressive">High variance</option></select></label>
+            <button id="generateBtn" class="primary">Generate card <span>→</span></button>
+          </div>
+        </section>
+
+        <section id="loading" class="loading hidden">
+          <div class="spinner"></div>
+          <div class="loading-copy"><strong>Researching today’s slate</strong><span id="loadingText">Comparing prices, lineups, injuries, matchup data and recent form…</span></div>
+        </section>
+
+        <section id="errorBox" class="error hidden"></section>
+
+        <section id="emptyState" class="empty-state">
+          <div class="empty-icon">↗</div>
+          <div><strong>Your daily card appears here.</strong><p>Choose a sport and generate. If both API keys are configured, BET MODE can load the default sport automatically when you open the site.</p></div>
+        </section>
+
+        <section id="card" class="hidden">
+          <div class="card-toolbar">
+            <div>
+              <div class="eyebrow" id="cardDate"></div>
+              <h2 id="cardTitle">Daily betting card</h2>
+            </div>
+            <div class="toolbar-actions">
+              <div class="freshness"><span>MARKET UPDATE</span><b id="marketFreshness">—</b></div>
+              <button id="refreshBtn" class="ghost">Refresh</button>
+            </div>
+          </div>
+
+          <div class="warning" id="priceNote"></div>
+          <p id="summary" class="summary"></p>
+
+          <div class="rank-grid" id="rankGrid"></div>
+
+          <section class="stake-panel panel" id="stakePanel">
+            <div class="stake-head"><div><div class="eyebrow">BUDGET PLAN</div><h3 id="stakeTitle">Recommended allocation</h3></div><div class="stake-total" id="stakeTotal">$0</div></div>
+            <div id="stakeRows" class="stake-rows"></div>
+            <p class="microcopy">Unbet cash is intentional. BET MODE does not force your full budget into the slate.</p>
+          </section>
+
+          <div class="section-head compact"><div><div class="eyebrow">MARKET ANALYSIS</div><h2>Serious candidates</h2></div><span class="section-note">Sorted by research quality, not payout size.</span></div>
+          <div class="table-wrap"><table><thead><tr><th>Bet</th><th>Book</th><th>Odds</th><th>Implied</th><th>Estimate</th><th>Edge</th><th>Confidence</th></tr></thead><tbody id="candidateRows"></tbody></table></div>
+          <div id="candidateDetails" class="candidate-details"></div>
+
+          <div class="section-head compact"><div><div class="eyebrow">ONLY AFTER THE SINGLES</div><h2>Parlays</h2></div></div>
+          <div class="parlay-grid" id="parlayGrid"></div>
+
+          <div class="two-col">
+            <section class="panel priority-panel"><div class="eyebrow">TOP PRIORITY</div><h3>If I place only three</h3><ol id="topThree"></ol></section>
+            <section class="panel reject-panel"><div class="eyebrow danger-label">PASS / WARNINGS</div><h3>What I’m rejecting</h3><ul id="warnings"></ul></section>
+          </div>
+
+          <section class="sources panel"><div class="source-head"><div><div class="eyebrow">RESEARCH TRAIL</div><h3>Sources checked</h3></div><span id="sourceCount" class="badge">0 sources</span></div><div id="sources" class="source-links"></div></section>
+        </section>
+      </section>
+
+      <section id="checkView" class="view hidden">
+        <section class="page-intro">
+          <div class="eyebrow">BET CHECK</div>
+          <h1>Drop the slip.<br><span>Find the weak leg.</span></h1>
+          <p>Upload a FanDuel screenshot, paste the bet text, or do both. Visible FanDuel Canada prices override external reference prices.</p>
+        </section>
+
+        <section class="check-layout">
+          <div class="panel check-input-panel">
+            <div class="field-label">FANDUEL SCREENSHOT</div>
+            <label id="uploadZone" class="upload-zone">
+              <input id="slipImage" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+              <div id="uploadPrompt"><div class="upload-icon">＋</div><strong>Upload screenshot</strong><span>PNG, JPG or WebP · automatically compressed</span></div>
+              <img id="imagePreview" class="image-preview hidden" alt="Bet slip preview">
+            </label>
+            <div class="divider"><span>OR</span></div>
+            <label class="text-field"><span>PASTE SLIP TEXT</span><textarea id="slipText" placeholder="Blue Jays ML -125&#10;Vladimir Guerrero Jr. 1+ hit -270&#10;Game total over 8.5 -110"></textarea></label>
+            <div class="check-actions"><button id="clearSlipBtn" class="ghost">Clear</button><button id="checkBtn" class="primary">Analyze slip <span>→</span></button></div>
+          </div>
+
+          <div class="panel check-guide">
+            <div class="eyebrow">WHAT IT CHECKS</div>
+            <ul class="feature-list">
+              <li><span>01</span><div><b>Every leg</b><small>KEEP / REPLACE / REMOVE with the main risk.</small></div></li>
+              <li><span>02</span><div><b>Current context</b><small>Lineups, injuries, starters, recent usage and matchup factors.</small></div></li>
+              <li><span>03</span><div><b>Price quality</b><small>Compares your visible price with available reference markets when possible.</small></div></li>
+              <li><span>04</span><div><b>Ticket structure</b><small>Flags correlation, contradiction, redundancy and the weakest leg.</small></div></li>
+            </ul>
+          </div>
+        </section>
+
+        <section id="checkLoading" class="loading hidden"><div class="spinner"></div><div class="loading-copy"><strong>Checking your slip</strong><span>Reading the ticket and researching every leg…</span></div></section>
+        <section id="checkError" class="error hidden"></section>
+        <section id="checkResult" class="hidden"></section>
+      </section>
+
+      <section id="resultsView" class="view hidden">
+        <section class="page-intro compact-intro">
+          <div class="eyebrow">RESULTS</div>
+          <h1>Track the process.<br><span>Not just the wins.</span></h1>
+          <p>Your results are stored locally in this browser. Record the closing price and outcome so you can judge whether BET MODE is actually improving your decisions.</p>
+        </section>
+
+        <div class="results-stats" id="resultsStats"></div>
+
+        <section class="results-layout">
+          <form id="resultForm" class="panel result-form">
+            <div class="eyebrow">ADD RESULT</div>
+            <h3>Record a wager</h3>
+            <div class="form-grid">
+              <label><span>Date</span><input id="resultDate" type="date" required></label>
+              <label><span>Sport</span><select id="resultSport"><option>MLB</option><option>NFL</option><option>NHL</option><option>NBA</option><option>Soccer</option></select></label>
+              <label class="full"><span>Bet</span><input id="resultBet" type="text" placeholder="Blue Jays ML" required></label>
+              <label><span>Stake (CAD)</span><input id="resultStake" type="number" min="0.01" step="0.01" value="10" required></label>
+              <label><span>American odds</span><input id="resultOdds" type="number" step="1" placeholder="-110" required></label>
+              <label><span>Result</span><select id="resultOutcome"><option value="win">Win</option><option value="loss">Loss</option><option value="push">Push</option></select></label>
+              <label><span>Type</span><select id="resultType"><option>Straight</option><option>Conservative parlay</option><option>Balanced parlay</option><option>Long shot</option><option>Live bet</option></select></label>
+            </div>
+            <button class="primary full-button" type="submit">Save result</button>
+          </form>
+
+          <section class="panel history-panel">
+            <div class="history-head"><div><div class="eyebrow">BET HISTORY</div><h3>Saved wagers</h3></div><button id="clearResultsBtn" class="text-button" type="button">Clear all</button></div>
+            <div id="resultsTableWrap" class="history-table-wrap"></div>
+          </section>
+        </section>
+      </section>
+
+      <footer>
+        <span>BET MODE is a research tool, not a guarantee of results.</span>
+        <span>Prices move · Reassess material line changes · Never chase losses</span>
+      </footer>
+    </main>
+  </div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
