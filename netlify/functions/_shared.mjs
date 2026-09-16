@@ -293,7 +293,6 @@ async function callResearch({ config, prompt, imageDataUrl = null }) {
       search_context_size: "medium"
     }],
     tool_choice: "auto",
-    text: { format: { type: "json_object" } },
     input: [{ role: "user", content }]
   };
 
