@@ -177,6 +177,33 @@
 
         <div class="results-stats" id="resultsStats"></div>
 
+        <section class="panel result-import-panel">
+          <div class="result-import-head">
+            <div><div class="eyebrow">SCREENSHOT IMPORT</div><h3>Log settled bets from a screenshot</h3><p>Upload a FanDuel bet-history or settled-slip screenshot. BET MODE reads the visible date, sport, wager, stake, odds and result, then shows an editable draft before anything is saved.</p></div>
+            <span class="badge">Review before save</span>
+          </div>
+          <div class="result-import-grid">
+            <div>
+              <label id="resultUploadZone" class="upload-zone compact-upload">
+                <input id="resultImage" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+                <div id="resultUploadPrompt"><div class="upload-icon">＋</div><strong>Upload settled bet screenshot</strong><span>PNG, JPG or WebP · one or multiple visible bets</span></div>
+                <img id="resultImagePreview" class="image-preview hidden" alt="Settled bet screenshot preview">
+              </label>
+              <div class="check-actions">
+                <button id="clearResultImageBtn" class="ghost" type="button">Clear</button>
+                <button id="readResultImageBtn" class="primary" type="button">Read screenshot <span>→</span></button>
+              </div>
+              <div id="resultImportLoading" class="mini-loading hidden"><div class="spinner"></div><span>Reading the settled wager…</span></div>
+              <div id="resultImportError" class="error hidden"></div>
+            </div>
+            <div id="resultImportDraft" class="import-draft empty-import">
+              <div class="import-empty-icon">↗</div>
+              <b>Your extracted bets will appear here</b>
+              <span>Nothing is added to Results until you review and save it.</span>
+            </div>
+          </div>
+        </section>
+
         <section class="results-layout">
           <form id="resultForm" class="panel result-form">
             <div class="eyebrow">ADD RESULT</div>
@@ -207,5 +234,6 @@
     </main>
   </div>
   <script type="module" src="app.js"></script>
+  <script type="module" src="results-import.js"></script>
 </body>
 </html>
