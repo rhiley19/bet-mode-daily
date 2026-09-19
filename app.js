@@ -70,6 +70,31 @@ $('#lowCreditMode').addEventListener('change', () => {
 });
 syncSaverToggle();
 
+function updateRunPreview() {
+  const low = $('#lowCreditMode').checked;
+  const research = $('#researchMode').value;
+  const cached = loadCachedCard();
+  const age = cached ? Date.now() - Number(cached.savedAt || 0) : Infinity;
+  const fresh = cached && age <= CARD_CACHE_MS;
+  const oddsCost = low ? 1 : 3;
+  $('#runCostText').textContent = fresh ? 'Fresh cache available · 0 new odds credits' : `Estimated: ${oddsCost} odds credit${oddsCost === 1 ? '' : 's'}`;
+  $('#runCostDetail').textContent = fresh
+    ? `${Math.max(1, Math.round(age/60000))} min old · Generate reuses this card. Refresh makes a new request.`
+    : `${low ? 'Moneyline only' : 'Moneyline + spread + total'} · ${research === 'deep' ? 'Deep research' : 'Quick research'} · cached for 30 minutes after generation.`;
+  $('#runMarketTag').textContent = low ? '1 market' : '3 markets';
+  $('#runResearchTag').textContent = research === 'deep' ? 'Deep AI' : 'Quick AI';
+  $('#generateBtn').innerHTML = fresh ? 'Use cached card <span>→</span>' : 'Generate card <span>→</span>';
+}
+function clearAllCardCaches() {
+  Object.keys(localStorage).filter(k => k.startsWith('betmode:card:')).forEach(k => localStorage.removeItem(k));
+  $('#cacheBadge').textContent = 'CACHE CLEARED';
+  $('#cacheDetail').textContent = 'Next Generate will request fresh data';
+  updateRunPreview();
+}
+$('#clearCardCacheBtn')?.addEventListener('click', clearAllCardCaches);
+$('#researchMode').addEventListener('change', updateRunPreview);
+$('#lowCreditMode').addEventListener('change', updateRunPreview);
+
 function cacheKey() { return `betmode:card:${sport}:${$('#lowCreditMode').checked ? 'low' : 'full'}:${$('#researchMode').value}`; }
 function loadCachedCard() {
   try {
@@ -93,6 +118,7 @@ function updateQuotaUI(quota) {
     $('#lowCreditMode').checked = true;
     localStorage.setItem('betmode:lowCreditMode','true');
     syncSaverToggle();
+    updateRunPreview();
   }
 }
 function restoreCachedCard() {
@@ -106,9 +132,11 @@ function restoreCachedCard() {
   render(row.card, { cached: true, cacheAgeMs: age });
   $('#cacheBadge').textContent = age <= CARD_CACHE_MS ? 'CACHE FRESH' : 'CACHE STALE';
   $('#cacheDetail').textContent = `${Math.max(1, Math.round(age/60000))} min old · no credits spent`;
+  updateRunPreview();
   return true;
 }
 updateQuotaUI(loadQuota());
+updateRunPreview();
 
 $('#statusPill').addEventListener('click', () => {
   const panel = $('#setupPanel');
@@ -301,6 +329,7 @@ async function generate({ force = false } = {}) {
     if (!res.ok || !data.ok) throw new Error(data.error || 'Could not generate card.');
     saveCachedCard(data);
     render(data);
+    updateRunPreview();
     $('#cacheBadge').textContent = 'CACHE SAVED';
     $('#cacheDetail').textContent = 'Fresh for 30 min · reopening costs 0 credits';
   } catch (e) {
