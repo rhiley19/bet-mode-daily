@@ -33,11 +33,56 @@ function rowProfit(r) {
   return americanProfit(r.stake, r.odds, r.outcome);
 }
 
+function filteredResults(rows) {
+  const sport = $('#historySportFilter')?.value || 'all';
+  const outcome = $('#historyOutcomeFilter')?.value || 'all';
+  const type = $('#historyTypeFilter')?.value || 'all';
+  return rows.filter(r =>
+    (sport === 'all' || r.sport === sport) &&
+    (outcome === 'all' || r.outcome === outcome) &&
+    (type === 'all' || r.type === type)
+  );
+}
+
+function renderCurve(rows) {
+  const host = $('#resultsCurve');
+  if (!host) return;
+  if (!rows.length) {
+    host.innerHTML = '<div class="curve-empty">Add results to build your bankroll curve.</div>';
+    $('#curveEndValue').textContent = fmtMoney(0);
+    return;
+  }
+  const ordered = rows.slice().sort((a,b) => String(a.date).localeCompare(String(b.date)));
+  let running = 0;
+  const values = [0, ...ordered.map(r => (running += rowProfit(r)))];
+  const min = Math.min(...values, 0);
+  const max = Math.max(...values, 0);
+  const range = Math.max(max - min, 1);
+  const w = 700, h = 150, pad = 10;
+  const pts = values.map((v,i) => {
+    const x = pad + (i / Math.max(values.length - 1, 1)) * (w - pad * 2);
+    const y = h - pad - ((v - min) / range) * (h - pad * 2);
+    return [x,y,v];
+  });
+  const path = pts.map((p,i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
+  const zeroY = h - pad - ((0 - min) / range) * (h - pad * 2);
+  const last = pts[pts.length - 1];
+  host.innerHTML = `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="Cumulative betting profit and loss">
+    <line class="curve-zero" x1="${pad}" y1="${zeroY.toFixed(1)}" x2="${w-pad}" y2="${zeroY.toFixed(1)}"></line>
+    <path class="curve-path" d="${path}"></path>
+    <circle class="curve-dot" cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="4"></circle>
+  </svg>`;
+  const endValue = values[values.length - 1];
+  $('#curveEndValue').textContent = `${endValue >= 0 ? '+' : ''}${fmtMoney(endValue)}`;
+  $('#curveEndValue').className = endValue > 0 ? 'profit' : endValue < 0 ? 'loss' : '';
+}
+
 function renderResultsEnhanced() {
   const stats = $('#resultsStats');
   const wrap = $('#resultsTableWrap');
   if (!stats || !wrap) return;
   const rows = loadResults();
+
   const totalStake = rows.reduce((a,r) => a + Number(r.stake || 0), 0);
   const pnl = rows.reduce((a,r) => a + rowProfit(r), 0);
   const wins = rows.filter(r => r.outcome === 'win').length;
@@ -52,16 +97,70 @@ function renderResultsEnhanced() {
     <article><span>WIN RATE</span><b>${(winRate*100).toFixed(1)}%</b></article>
     <article><span>WAGERS</span><b>${rows.length}</b></article>`;
 
-  wrap.innerHTML = rows.length ? `<table class="history-table"><thead><tr><th>Date</th><th>Bet</th><th>Stake</th><th>Odds</th><th>Result</th><th>P/L</th><th></th></tr></thead><tbody>${rows.slice().reverse().map(r => {
+  const shown = filteredResults(rows);
+  const filteredPnl = shown.reduce((a,r) => a + rowProfit(r), 0);
+  $('#filteredPnl').textContent = `${filteredPnl >= 0 ? '+' : ''}${fmtMoney(filteredPnl)}`;
+  $('#filteredPnl').className = filteredPnl > 0 ? 'profit' : filteredPnl < 0 ? 'loss' : '';
+  $('#filteredCount').textContent = `${shown.length} wager${shown.length === 1 ? '' : 's'}`;
+
+  const priced = shown.map(r => Number(r.odds)).filter(Number.isFinite);
+  const avgOdds = priced.length ? priced.reduce((a,b) => a+b,0) / priced.length : null;
+  $('#averageOdds').textContent = avgOdds == null ? '—' : fmtOdds(Math.round(avgOdds));
+
+  const sportMap = new Map();
+  rows.forEach(r => {
+    const key = r.sport || 'Other';
+    const prev = sportMap.get(key) || { pnl:0, count:0 };
+    prev.pnl += rowProfit(r);
+    prev.count += 1;
+    sportMap.set(key, prev);
+  });
+  const best = [...sportMap.entries()].sort((a,b) => b[1].pnl - a[1].pnl)[0];
+  $('#bestSport').textContent = best ? best[0] : '—';
+  $('#bestSportNote').textContent = best ? `${best[1].pnl >= 0 ? '+' : ''}${fmtMoney(best[1].pnl)} · ${best[1].count} bet${best[1].count === 1 ? '' : 's'}` : 'Needs history';
+
+  const straights = rows.filter(r => r.type === 'Straight');
+  const straightStake = straights.reduce((a,r)=>a+Number(r.stake||0),0);
+  const straightPnl = straights.reduce((a,r)=>a+rowProfit(r),0);
+  const straightRoi = straightStake ? straightPnl / straightStake : null;
+  $('#straightRoi').textContent = straightRoi == null ? '—' : `${straightRoi >= 0 ? '+' : ''}${(straightRoi*100).toFixed(1)}%`;
+  $('#straightRoi').className = straightRoi > 0 ? 'profit' : straightRoi < 0 ? 'loss' : '';
+
+  renderCurve(shown);
+
+  wrap.innerHTML = shown.length ? `<table class="history-table"><thead><tr><th>Date</th><th>Bet</th><th>Stake</th><th>Odds</th><th>Result</th><th>P/L</th><th></th></tr></thead><tbody>${shown.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))).map(r => {
     const p = rowProfit(r);
     return `<tr><td>${esc(r.date)}</td><td><b>${esc(r.bet)}${r.source === 'screenshot' ? '<span class="screenshot-source">IMG</span>' : ''}</b><small>${esc(r.sport)} · ${esc(r.type)}</small></td><td>${fmtMoney(r.stake)}</td><td>${fmtOdds(r.odds)}</td><td><span class="result-pill ${esc(r.outcome)}">${esc(String(r.outcome || '').toUpperCase())}</span></td><td class="${p > 0 ? 'profit' : p < 0 ? 'loss' : ''}">${p >= 0 ? '+' : ''}${fmtMoney(p)}</td><td><button class="delete-result" data-id="${esc(r.id)}" aria-label="Delete result">×</button></td></tr>`;
-  }).join('')}</tbody></table>` : '<div class="no-history">No results saved yet. Add one manually or upload a settled-bet screenshot.</div>';
+  }).join('')}</tbody></table>` : '<div class="no-history">No wagers match these filters.</div>';
 
   $$('.delete-result').forEach(btn => btn.addEventListener('click', () => {
     saveResults(loadResults().filter(r => r.id !== btn.dataset.id));
     renderResultsEnhanced();
   }));
 }
+
+function exportResultsCsv() {
+  const rows = filteredResults(loadResults());
+  if (!rows.length) return;
+  const cols = ['date','sport','bet','stake','odds','outcome','type','actualProfit','source'];
+  const csv = [cols.join(','), ...rows.map(r => cols.map(k => {
+    const val = r[k] ?? '';
+    return `"${String(val).replaceAll('"','""')}"`;
+  }).join(','))].join('\n');
+  const blob = new Blob([csv], { type:'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `bet-mode-results-${todayToronto()}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+['#historySportFilter','#historyOutcomeFilter','#historyTypeFilter'].forEach(sel => $(sel)?.addEventListener('change', renderResultsEnhanced));
+
+$('#exportResultsBtn')?.addEventListener('click', exportResultsCsv);
 
 async function compressImage(file) {
   if (!file?.type?.match(/^image\/(png|jpeg|webp)$/)) throw new Error('Use a PNG, JPG or WebP screenshot.');
