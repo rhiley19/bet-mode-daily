@@ -177,13 +177,13 @@ async function oddsFetch(url) {
   };
 }
 
-export async function fetchTodaysMarkets(config, requestedDate) {
+export async function fetchTodaysMarkets(config, requestedDate, { lowCreditMode = false } = {}) {
   const apiKey = process.env.ODDS_API_KEY;
   if (!apiKey) throw new Error("ODDS_API_KEY is not configured.");
 
   const url = new URL(`https://api.the-odds-api.com/v4/sports/${config.oddsKey}/odds`);
   url.searchParams.set("apiKey", apiKey);
-  url.searchParams.set("markets", "h2h,spreads,totals");
+  url.searchParams.set("markets", lowCreditMode ? "h2h" : "h2h,spreads,totals");
   url.searchParams.set("oddsFormat", "american");
   url.searchParams.set("bookmakers", "fanduel,pinnacle,draftkings,betmgm");
   url.searchParams.set("dateFormat", "iso");
@@ -223,6 +223,7 @@ export async function fetchTodaysMarkets(config, requestedDate) {
     quota: featured.quota,
     latestMarketUpdate,
     propMode: propEnabled ? "enabled" : "disabled",
+    usageMode: lowCreditMode ? "low-credit" : "full",
     warnings
   };
 }
@@ -271,7 +272,7 @@ export function parseJsonLoose(text) {
   throw new Error("Could not parse analysis response as JSON.");
 }
 
-async function callResearch({ config, prompt, imageDataUrl = null }) {
+async function callResearch({ config, prompt, imageDataUrl = null, researchMode = "quick" }) {
   const openaiKey = process.env.OPENAI_API_KEY;
   if (!openaiKey) throw new Error("OPENAI_API_KEY is not configured.");
 
@@ -286,11 +287,11 @@ async function callResearch({ config, prompt, imageDataUrl = null }) {
 
   const body = {
     model: process.env.OPENAI_MODEL || "gpt-5.6-luna",
-    reasoning: { effort: "medium" },
+    reasoning: { effort: researchMode === "deep" ? "medium" : "low" },
     tools: [{
       type: "web_search",
       filters: { allowed_domains: sourceDomains(config) },
-      search_context_size: "medium"
+      search_context_size: researchMode === "deep" ? "medium" : "low"
     }],
     tool_choice: "auto",
     input: [{ role: "user", content }]
@@ -317,7 +318,7 @@ async function callResearch({ config, prompt, imageDataUrl = null }) {
   };
 }
 
-export async function runResearch({ config, sport, date, markets, extraContext = "" }) {
+export async function runResearch({ config, sport, date, markets, extraContext = "", researchMode = "quick" }) {
   const slimMarkets = markets.slice(0, 280);
   const hasProps = slimMarkets.some((m) => m.isPlayerProp);
   const prompt = `You are the research engine for BET MODE, a disciplined sports-betting dashboard in Ontario, Canada.
@@ -374,7 +375,7 @@ Return ONLY valid JSON in this exact shape:
 
 Do not manufacture precision. estimatedProbability may be null if evidence is insufficient. Do not create a long-shot parlay just to fill the field. Prefer PASS to a weak wager.`;
 
-  return callResearch({ config, prompt });
+  return callResearch({ config, prompt, researchMode });
 }
 
 export async function runBetCheckResearch({ config, sport, date, markets, slipText = "", imageDataUrl = null }) {
