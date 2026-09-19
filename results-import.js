@@ -105,11 +105,11 @@ function normalizeImportedBet(raw = {}) {
     date: raw.date || todayToronto(),
     sport: ['MLB','NFL','NHL','NBA','Soccer'].includes(raw.sport) ? raw.sport : 'MLB',
     bet: raw.bet || '',
-    stake: Number.isFinite(Number(raw.stake)) ? Number(raw.stake) : '',
-    odds: Number.isFinite(Number(raw.odds)) ? Number(raw.odds) : '',
+    stake: raw.stake !== null && raw.stake !== undefined && raw.stake !== '' && Number.isFinite(Number(raw.stake)) ? Number(raw.stake) : '',
+    odds: raw.odds !== null && raw.odds !== undefined && raw.odds !== '' && Number.isFinite(Number(raw.odds)) ? Number(raw.odds) : '',
     outcome: ['win','loss','push'].includes(raw.outcome) ? raw.outcome : 'win',
     type: ['Straight','Conservative parlay','Balanced parlay','Long shot','Live bet'].includes(raw.type) ? raw.type : 'Straight',
-    actualProfit: Number.isFinite(Number(raw.actualProfit)) ? Number(raw.actualProfit) : null,
+    actualProfit: raw.actualProfit !== null && raw.actualProfit !== undefined && raw.actualProfit !== '' && Number.isFinite(Number(raw.actualProfit)) ? Number(raw.actualProfit) : null,
     confidence: Number.isFinite(Number(raw.confidence)) ? Math.round(Number(raw.confidence)) : null,
     uncertainFields: Array.isArray(raw.uncertainFields) ? raw.uncertainFields : []
   };
