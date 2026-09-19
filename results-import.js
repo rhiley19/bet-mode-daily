@@ -279,7 +279,7 @@ function renderDraft(notes = '') {
     const selected = importedResultDraft.filter(r => r.selected);
     const bad = selected.find(r => !r.date || !r.bet || r.outcome === 'review' || !Number.isFinite(Number(r.stake)) || Number(r.stake) <= 0 || (r.odds == null && r.actualProfit == null));
     if (!selected.length) return showImportError('Select at least one extracted bet to save.');
-    if (bad) return showImportError('Review the selected bets. Each needs a date, bet description, stake, and either American odds or an actual P/L value.');
+    if (bad) return showImportError('Review the selected bets. Confirm the result, date, bet description, stake, and either American odds or an actual P/L value.');
     const rows = loadResults();
     for (const r of selected) rows.push({
       id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
@@ -347,11 +347,12 @@ function parseOcrBetBlock(text, ocrConfidence) {
   const uncertainFields = [];
   if (!date) uncertainFields.push('date');
   if (outcome === 'review') uncertainFields.push('result');
+  if (detectSportFromText(text) === 'Other') uncertainFields.push('sport');
   if (stake == null) uncertainFields.push('stake');
   if (odds == null && actualProfit == null) uncertainFields.push('odds');
   if (!useful.length) uncertainFields.push('bet');
-  const requiredScore = [date, stake != null, odds != null || actualProfit != null, useful.length > 0].filter(Boolean).length;
-  const confidence = Math.round(Math.max(0, Math.min(100, (Number(ocrConfidence || 0) * .65) + (requiredScore/4*35))));
+  const requiredScore = [date, outcome !== 'review', detectSportFromText(text) !== 'Other', stake != null, odds != null || actualProfit != null, useful.length > 0].filter(Boolean).length;
+  const confidence = Math.round(Math.max(0, Math.min(100, (Number(ocrConfidence || 0) * .65) + (requiredScore/6*35))));
   return normalizeImportedBet({ date, sport:detectSportFromText(text), bet, stake, odds, outcome, type, actualProfit, confidence, uncertainFields });
 }
 function splitOcrIntoBetBlocks(text) {
