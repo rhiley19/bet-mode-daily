@@ -90,6 +90,20 @@
           <div class="cache-status"><span id="cacheBadge" class="badge">CACHE READY</span><small id="cacheDetail">30-minute local cache</small></div>
         </section>
 
+        <section class="run-preview" id="runPreview">
+          <div class="run-preview-main">
+            <span class="field-label">NEXT GENERATE</span>
+            <strong id="runCostText">Estimated: 3 odds credits</strong>
+            <small id="runCostDetail">Full markets · Quick research · fresh cards are cached for 30 minutes.</small>
+          </div>
+          <div class="run-preview-tags">
+            <span id="runMarketTag" class="mode-chip">3 markets</span>
+            <span id="runResearchTag" class="mode-chip">Quick AI</span>
+            <span class="mode-chip free-chip">Cache reuse $0</span>
+          </div>
+          <button id="clearCardCacheBtn" class="text-button" type="button">Clear cached cards</button>
+        </section>
+
         <section id="loading" class="loading hidden">
           <div class="spinner"></div>
           <div class="loading-copy"><strong>Researching today’s slate</strong><span id="loadingText">Comparing prices, lineups, injuries, matchup data and recent form…</span></div>
@@ -185,6 +199,30 @@
         </section>
 
         <div class="results-stats" id="resultsStats"></div>
+
+        <section id="resultsAnalytics" class="panel results-analytics">
+          <div class="analytics-head">
+            <div><div class="eyebrow">PERFORMANCE DESK</div><h3>What your history is actually doing</h3><p>Filter the log without deleting anything. The curve and breakdown recalculate instantly from the selected view.</p></div>
+            <div class="analytics-actions">
+              <button id="exportResultsBtn" class="ghost" type="button">Export CSV</button>
+            </div>
+          </div>
+          <div class="results-filter-row">
+            <label><span>Sport</span><select id="historySportFilter"><option value="all">All sports</option><option>MLB</option><option>NFL</option><option>NHL</option><option>NBA</option><option>Soccer</option></select></label>
+            <label><span>Result</span><select id="historyOutcomeFilter"><option value="all">All results</option><option value="win">Wins</option><option value="loss">Losses</option><option value="push">Pushes</option></select></label>
+            <label><span>Type</span><select id="historyTypeFilter"><option value="all">All types</option><option>Straight</option><option>Conservative parlay</option><option>Balanced parlay</option><option>Long shot</option><option>Live bet</option></select></label>
+          </div>
+          <div class="analytics-grid">
+            <article><span>FILTERED P/L</span><b id="filteredPnl">—</b><small id="filteredCount">0 wagers</small></article>
+            <article><span>AVG ODDS</span><b id="averageOdds">—</b><small>American price</small></article>
+            <article><span>BEST SPORT</span><b id="bestSport">—</b><small id="bestSportNote">Needs history</small></article>
+            <article><span>STRAIGHT ROI</span><b id="straightRoi">—</b><small>All saved straights</small></article>
+          </div>
+          <div class="curve-card">
+            <div class="curve-head"><span>CUMULATIVE P/L</span><b id="curveEndValue">$0.00</b></div>
+            <div id="resultsCurve" class="results-curve" aria-label="Cumulative profit and loss chart"></div>
+          </div>
+        </section>
 
         <section class="panel result-import-panel">
           <div class="result-import-head">
