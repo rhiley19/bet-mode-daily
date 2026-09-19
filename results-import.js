@@ -103,9 +103,10 @@ function renderResultsEnhanced() {
   $('#filteredPnl').className = filteredPnl > 0 ? 'profit' : filteredPnl < 0 ? 'loss' : '';
   $('#filteredCount').textContent = `${shown.length} wager${shown.length === 1 ? '' : 's'}`;
 
-  const priced = shown.map(r => Number(r.odds)).filter(Number.isFinite);
-  const avgOdds = priced.length ? priced.reduce((a,b) => a+b,0) / priced.length : null;
-  $('#averageOdds').textContent = avgOdds == null ? '—' : fmtOdds(Math.round(avgOdds));
+  const priced = shown.map(r => Number(r.odds)).filter(o => Number.isFinite(o) && o !== 0);
+  const implied = priced.map(o => o < 0 ? (-o) / ((-o) + 100) : 100 / (o + 100));
+  const avgImplied = implied.length ? implied.reduce((a,b) => a+b,0) / implied.length : null;
+  $('#averageOdds').textContent = avgImplied == null ? '—' : `${(avgImplied * 100).toFixed(1)}%`;
 
   const sportMap = new Map();
   rows.forEach(r => {
