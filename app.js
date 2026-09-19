@@ -5,6 +5,7 @@ let sport = localStorage.getItem("betmode:sport") || "MLB";
 let lastCard = null;
 let screenshotDataUrl = null;
 let healthState = null;
+const CARD_CACHE_MS = 30 * 60 * 1000;
 
 const fmtPct = (v) => v == null || Number.isNaN(Number(v)) ? "—" : `${(Number(v) * 100).toFixed(1)}%`;
 const fmtMoney = (v) => new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD", maximumFractionDigits: 2 }).format(Number(v || 0));
@@ -43,10 +44,11 @@ function syncSportButtons() {
   $$('.sport').forEach((x) => x.classList.toggle('active', x.dataset.sport === sport));
 }
 
-$$('.sport').forEach(btn => btn.addEventListener('click', () => {
+$('.sport').forEach(btn => btn.addEventListener('click', () => {
   sport = btn.dataset.sport;
   localStorage.setItem("betmode:sport", sport);
   syncSportButtons();
+  restoreCachedCard();
 }));
 syncSportButtons();
 
@@ -57,6 +59,56 @@ $('#riskProfile').addEventListener('change', () => {
   localStorage.setItem('betmode:risk', $('#riskProfile').value);
   if (lastCard) renderStakePlan(lastCard);
 });
+$('#researchMode').value = localStorage.getItem('betmode:researchMode') || 'quick';
+$('#researchMode').addEventListener('change', () => localStorage.setItem('betmode:researchMode', $('#researchMode').value));
+$('#lowCreditMode').checked = localStorage.getItem('betmode:lowCreditMode') === 'true';
+function syncSaverToggle() { $('#lowCreditMode').closest('.saver-toggle')?.classList.toggle('active', $('#lowCreditMode').checked); }
+$('#lowCreditMode').addEventListener('change', () => {
+  localStorage.setItem('betmode:lowCreditMode', String($('#lowCreditMode').checked));
+  syncSaverToggle();
+  updateQuotaUI(loadQuota());
+});
+syncSaverToggle();
+
+function cacheKey() { return `betmode:card:${sport}:${$('#lowCreditMode').checked ? 'low' : 'full'}:${$('#researchMode').value}`; }
+function loadCachedCard() {
+  try {
+    const row = JSON.parse(localStorage.getItem(cacheKey()) || 'null');
+    return row && row.card ? row : null;
+  } catch { return null; }
+}
+function saveCachedCard(card) { localStorage.setItem(cacheKey(), JSON.stringify({ savedAt: Date.now(), card })); }
+function loadQuota() { try { return JSON.parse(localStorage.getItem('betmode:oddsQuota') || 'null'); } catch { return null; } }
+function saveQuota(quota) { if (quota) localStorage.setItem('betmode:oddsQuota', JSON.stringify({ ...quota, savedAt: Date.now() })); }
+function updateQuotaUI(quota) {
+  const remaining = Number(quota?.remaining);
+  const used = Number(quota?.used);
+  const total = Number.isFinite(remaining) && Number.isFinite(used) ? remaining + used : null;
+  const pct = total && total > 0 ? Math.max(0, Math.min(100, (remaining / total) * 100)) : 0;
+  $('#quotaHeadline').textContent = Number.isFinite(remaining) ? `${remaining} odds credits remaining` : 'Credits unknown';
+  $('#quotaDetail').textContent = Number.isFinite(remaining) ? `Last request cost ${quota?.last ?? '—'} · ${used || 0} used this cycle${$('#lowCreditMode').checked ? ' · Low Credit Mode ON' : ''}` : 'Generate once to read the provider balance. Cached cards do not spend credits.';
+  $('#quotaBar').style.width = `${pct}%`;
+  $('#quotaBar').classList.toggle('low', Number.isFinite(remaining) && remaining <= 50);
+  if (Number.isFinite(remaining) && remaining <= 50 && !$('#lowCreditMode').checked) {
+    $('#lowCreditMode').checked = true;
+    localStorage.setItem('betmode:lowCreditMode','true');
+    syncSaverToggle();
+  }
+}
+function restoreCachedCard() {
+  const row = loadCachedCard();
+  if (!row) {
+    $('#cacheBadge').textContent = 'NO CACHE';
+    $('#cacheDetail').textContent = 'Generate once to save this mode';
+    return false;
+  }
+  const age = Date.now() - Number(row.savedAt || 0);
+  render(row.card, { cached: true, cacheAgeMs: age });
+  $('#cacheBadge').textContent = age <= CARD_CACHE_MS ? 'CACHE FRESH' : 'CACHE STALE';
+  $('#cacheDetail').textContent = `${Math.max(1, Math.round(age/60000))} min old · no credits spent`;
+  return true;
+}
+updateQuotaUI(loadQuota());
 
 $('#statusPill').addEventListener('click', () => {
   const panel = $('#setupPanel');
@@ -148,7 +200,7 @@ function renderStakePlan(card) {
   }).join('') + `<div class="stake-row unbet"><div><span>Unbet cash</span><b>Keep available unless a better price appears</b></div><strong>${fmtMoney(unbet)}</strong></div>`;
 }
 
-function render(card) {
+function render(card, { cached = false, cacheAgeMs = 0 } = {}) {
   lastCard = card;
   $('#emptyState').classList.add('hidden');
   $('#card').classList.remove('hidden');
@@ -157,6 +209,16 @@ function render(card) {
   $('#marketFreshness').textContent = prettyTime(card.latestMarketUpdate || card.generatedAt);
   $('#priceNote').textContent = card.priceNote || 'Reference prices can differ from FanDuel Canada.';
   $('#summary').textContent = card.summary || '';
+  const existing = $('#cacheBanner');
+  if (existing) existing.remove();
+  if (cached) {
+    const mins = Math.max(1, Math.round(cacheAgeMs / 60000));
+    $('#priceNote').insertAdjacentHTML('beforebegin', `<div id="cacheBanner" class="cache-banner"><span><b>Cached card</b> · ${mins} min old · no new API credits used</span><span>${cacheAgeMs <= CARD_CACHE_MS ? 'Fresh cache' : 'Stale — refresh before betting'}</span></div>`);
+  }
+  if (card.oddsQuota) {
+    saveQuota(card.oddsQuota);
+    updateQuotaUI(card.oddsQuota);
+  }
 
   const r = card.rankings || {};
   $('#rankGrid').innerHTML = [
@@ -216,30 +278,50 @@ function render(card) {
   renderStakePlan(card);
 }
 
-async function generate() {
+async function generate({ force = false } = {}) {
   $('#errorBox').classList.add('hidden');
+  const cached = loadCachedCard();
+  const age = cached ? Date.now() - Number(cached.savedAt || 0) : Infinity;
+  if (!force && cached && age <= CARD_CACHE_MS) {
+    render(cached.card, { cached:true, cacheAgeMs:age });
+    $('#cacheBadge').textContent = 'CACHE FRESH';
+    $('#cacheDetail').textContent = `${Math.max(1, Math.round(age/60000))} min old · no credits spent`;
+    return;
+  }
   $('#card').classList.add('hidden');
   $('#emptyState').classList.add('hidden');
   $('#loading').classList.remove('hidden');
   $('#generateBtn').disabled = true;
-  $('#loadingText').textContent = 'Comparing prices, lineups, injuries, matchup data and recent form…';
+  const low = $('#lowCreditMode').checked;
+  const research = $('#researchMode').value;
+  $('#loadingText').textContent = low ? 'Low Credit Mode: requesting moneylines only, then researching the slate…' : 'Comparing prices, lineups, injuries, matchup data and recent form…';
   try {
-    const res = await fetch(`/api/daily-picks?sport=${encodeURIComponent(sport)}`);
+    const res = await fetch(`/api/daily-picks?sport=${encodeURIComponent(sport)}&mode=${low ? 'low' : 'full'}&research=${encodeURIComponent(research)}`);
     const data = await res.json();
     if (!res.ok || !data.ok) throw new Error(data.error || 'Could not generate card.');
+    saveCachedCard(data);
     render(data);
+    $('#cacheBadge').textContent = 'CACHE SAVED';
+    $('#cacheDetail').textContent = 'Fresh for 30 min · reopening costs 0 credits';
   } catch (e) {
-    $('#errorBox').textContent = e.message;
+    const msg = String(e.message || e);
+    const quotaProblem = /OUT_OF_USAGE_CREDITS|usage credits|quota|credits/i.test(msg);
+    if (cached) {
+      render(cached.card, { cached:true, cacheAgeMs:age });
+      $('#errorBox').textContent = quotaProblem ? 'Odds quota is exhausted. Showing your last cached card instead — treat prices as stale until the quota resets or you update the Odds API plan.' : `${msg} Showing your last cached card.`;
+    } else {
+      $('#errorBox').textContent = quotaProblem ? 'The Odds API quota is exhausted. Daily Card cannot price a new wager until the quota resets. Results screenshot OCR still works for free, and Bet Check can use a FanDuel screenshot.' : msg;
+      $('#emptyState').classList.remove('hidden');
+    }
     $('#errorBox').classList.remove('hidden');
-    $('#emptyState').classList.remove('hidden');
   } finally {
     $('#loading').classList.add('hidden');
     $('#generateBtn').disabled = false;
   }
 }
 
-$('#generateBtn').addEventListener('click', generate);
-$('#refreshBtn').addEventListener('click', generate);
+$('#generateBtn').addEventListener('click', () => generate({ force:false }));
+$('#refreshBtn').addEventListener('click', () => generate({ force:true }));
 
 async function compressImage(file) {
   if (!file.type.match(/^image\/(png|jpeg|webp)$/)) throw new Error('Use a PNG, JPG or WebP screenshot.');
@@ -418,6 +500,6 @@ $('#resultDate').value = new Intl.DateTimeFormat('en-CA', { timeZone:'America/To
 renderResults();
 
 (async () => {
-  const ready = await health();
-  if (ready) setTimeout(generate, 250);
+  await health();
+  restoreCachedCard();
 })();
