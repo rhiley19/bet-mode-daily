@@ -344,12 +344,28 @@ async function generate({ force = false } = {}) {
   } catch (e) {
     const msg = String(e.message || e);
     const quotaProblem = /OUT_OF_USAGE_CREDITS|usage credits|quota|credits/i.test(msg);
-    if (cached) {
-      render(cached.card, { cached:true, cacheAgeMs:age });
-      $('#errorBox').textContent = quotaProblem ? 'Odds quota is exhausted. Showing your last cached card instead — treat prices as stale until the quota resets or you update the Odds API plan.' : `${msg} Showing your last cached card.`;
+    if (cached) render(cached.card, { cached:true, cacheAgeMs:age });
+    else $('#emptyState').classList.remove('hidden');
+
+    if (quotaProblem) {
+      $('#errorBox').innerHTML = `<div class="credit-error-card">
+        <div><b>${cached ? 'Odds quota exhausted · cached card shown' : 'Odds quota exhausted'}</b><span>${cached ? 'The displayed prices may be stale. You can still work from your actual FanDuel price without spending another Odds API credit.' : 'Daily Card cannot fetch a fresh market right now, but screenshot workflows still work.'}</span></div>
+        <div class="credit-error-actions">
+          <button class="ghost" type="button" data-fallback-view="check">Open Bet Check</button>
+          <button class="ghost" type="button" data-fallback-view="results">Log results · free OCR</button>
+          ${!$('#lowCreditMode').checked ? '<button class="ghost" type="button" id="enableLowCreditBtn">Enable Low Credit</button>' : ''}
+        </div>
+      </div>`;
+      $('[data-fallback-view]').forEach(btn => btn.addEventListener('click', () => setView(btn.dataset.fallbackView)));
+      $('#enableLowCreditBtn')?.addEventListener('click', () => {
+        $('#lowCreditMode').checked = true;
+        localStorage.setItem('betmode:lowCreditMode','true');
+        syncSaverToggle();
+        updateQuotaUI(loadQuota());
+        updateRunPreview();
+      });
     } else {
-      $('#errorBox').textContent = quotaProblem ? 'The Odds API quota is exhausted. Daily Card cannot price a new wager until the quota resets. Results screenshot OCR still works for free, and Bet Check can use a FanDuel screenshot.' : msg;
-      $('#emptyState').classList.remove('hidden');
+      $('#errorBox').textContent = cached ? `${msg} Showing your last cached card.` : msg;
     }
     $('#errorBox').classList.remove('hidden');
   } finally {
