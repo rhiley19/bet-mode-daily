@@ -190,24 +190,24 @@ function todayToronto() {
   return new Intl.DateTimeFormat('en-CA', { timeZone:'America/Toronto', year:'numeric', month:'2-digit', day:'2-digit' }).format(new Date());
 }
 function sportOptions(value) {
-  return ['MLB','NFL','NHL','NBA','Soccer'].map(x => `<option ${x === value ? 'selected' : ''}>${x}</option>`).join('');
+  return ['MLB','NFL','NHL','NBA','Soccer','Other'].map(x => `<option ${x === value ? 'selected' : ''}>${x}</option>`).join('');
 }
 function typeOptions(value) {
   return ['Straight','Conservative parlay','Balanced parlay','Long shot','Live bet'].map(x => `<option ${x === value ? 'selected' : ''}>${x}</option>`).join('');
 }
 function outcomeOptions(value) {
-  return [['win','Win'],['loss','Loss'],['push','Push']].map(([v,l]) => `<option value="${v}" ${v === value ? 'selected' : ''}>${l}</option>`).join('');
+  return [['review','Review required'],['win','Win'],['loss','Loss'],['push','Push']].map(([v,l]) => `<option value="${v}" ${v === value ? 'selected' : ''}>${l}</option>`).join('');
 }
 
 function normalizeImportedBet(raw = {}) {
   return {
     selected: true,
     date: raw.date || todayToronto(),
-    sport: ['MLB','NFL','NHL','NBA','Soccer'].includes(raw.sport) ? raw.sport : 'MLB',
+    sport: ['MLB','NFL','NHL','NBA','Soccer','Other'].includes(raw.sport) ? raw.sport : 'Other',
     bet: raw.bet || '',
     stake: raw.stake !== null && raw.stake !== undefined && raw.stake !== '' && Number.isFinite(Number(raw.stake)) ? Number(raw.stake) : '',
     odds: raw.odds !== null && raw.odds !== undefined && raw.odds !== '' && Number.isFinite(Number(raw.odds)) ? Number(raw.odds) : '',
-    outcome: ['win','loss','push'].includes(raw.outcome) ? raw.outcome : 'win',
+    outcome: ['win','loss','push'].includes(raw.outcome) ? raw.outcome : 'review',
     type: ['Straight','Conservative parlay','Balanced parlay','Long shot','Live bet'].includes(raw.type) ? raw.type : 'Straight',
     actualProfit: raw.actualProfit !== null && raw.actualProfit !== undefined && raw.actualProfit !== '' && Number.isFinite(Number(raw.actualProfit)) ? Number(raw.actualProfit) : null,
     confidence: Number.isFinite(Number(raw.confidence)) ? Math.round(Number(raw.confidence)) : null,
@@ -277,7 +277,7 @@ function renderDraft(notes = '') {
   $('#saveImportedBtn')?.addEventListener('click', () => {
     syncDraft();
     const selected = importedResultDraft.filter(r => r.selected);
-    const bad = selected.find(r => !r.date || !r.bet || !Number.isFinite(Number(r.stake)) || Number(r.stake) <= 0 || (r.odds == null && r.actualProfit == null));
+    const bad = selected.find(r => !r.date || !r.bet || r.outcome === 'review' || !Number.isFinite(Number(r.stake)) || Number(r.stake) <= 0 || (r.odds == null && r.actualProfit == null));
     if (!selected.length) return showImportError('Select at least one extracted bet to save.');
     if (bad) return showImportError('Review the selected bets. Each needs a date, bet description, stake, and either American odds or an actual P/L value.');
     const rows = loadResults();
@@ -322,12 +322,12 @@ function detectSportFromText(text) {
   if (/\bNHL\b|HOCKEY|SHOTS ON GOAL/.test(t)) return 'NHL';
   if (/\bNBA\b|BASKETBALL|THREES|REBOUNDS/.test(t)) return 'NBA';
   if (/SOCCER|PREMIER LEAGUE|LA LIGA|CHAMPIONS LEAGUE|GOALS?/.test(t)) return 'Soccer';
-  return 'MLB';
+  return 'Other';
 }
 function parseOcrBetBlock(text, ocrConfidence) {
   const lines = text.split(/\n+/).map(x => x.replace(/\s+/g,' ').trim()).filter(Boolean);
   const lower = text.toLowerCase();
-  const outcome = /\b(lost|loss|losing)\b/.test(lower) ? 'loss' : /\b(push|void|refunded|refund)\b/.test(lower) ? 'push' : /\b(won|win|winner|settled.*won)\b/.test(lower) ? 'win' : 'win';
+  const outcome = /\b(lost|loss|losing)\b/.test(lower) ? 'loss' : /\b(push|void|refunded|refund)\b/.test(lower) ? 'push' : /\b(won|win|winner|settled.*won)\b/.test(lower) ? 'win' : 'review';
   let stake = null, payout = null;
   for (const line of lines) {
     if (stake == null && /(wager|stake|bet amount|amount wagered)/i.test(line)) stake = parseMoneyValue(line);
@@ -346,6 +346,7 @@ function parseOcrBetBlock(text, ocrConfidence) {
   else if (outcome === 'win' && payout != null && stake != null) actualProfit = payout - stake;
   const uncertainFields = [];
   if (!date) uncertainFields.push('date');
+  if (outcome === 'review') uncertainFields.push('result');
   if (stake == null) uncertainFields.push('stake');
   if (odds == null && actualProfit == null) uncertainFields.push('odds');
   if (!useful.length) uncertainFields.push('bet');
