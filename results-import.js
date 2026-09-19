@@ -5,6 +5,7 @@ const fmtMoney = (v) => new Intl.NumberFormat("en-CA", { style: "currency", curr
 const fmtOdds = (v) => v == null || v === '' || Number.isNaN(Number(v)) ? '—' : Number(v) > 0 ? `+${Number(v)}` : String(Number(v));
 
 let resultScreenshotDataUrl = null;
+let resultScreenshotFile = null;
 let importedResultDraft = [];
 
 const style = document.createElement('style');
@@ -116,6 +117,7 @@ function normalizeImportedBet(raw = {}) {
 
 function resetImporter() {
   resultScreenshotDataUrl = null;
+  resultScreenshotFile = null;
   importedResultDraft = [];
   if ($('#resultImage')) $('#resultImage').value = '';
   if ($('#resultImagePreview')) { $('#resultImagePreview').src = ''; $('#resultImagePreview').classList.add('hidden'); }
@@ -196,9 +198,118 @@ function showImportError(message) {
   box.classList.remove('hidden');
 }
 
+
+function parseMoneyValue(line) {
+  const m = String(line || '').match(/\$\s*([0-9]+(?:[.,][0-9]{2})?)/);
+  return m ? Number(m[1].replace(',','.')) : null;
+}
+function parseOcrDate(text) {
+  const iso = text.match(/\b(20\d{2})[-\/.](\d{1,2})[-\/.](\d{1,2})\b/);
+  if (iso) return `${iso[1]}-${String(iso[2]).padStart(2,'0')}-${String(iso[3]).padStart(2,'0')}`;
+  const us = text.match(/\b(\d{1,2})[\/.](\d{1,2})[\/.](20\d{2})\b/);
+  if (us) return `${us[3]}-${String(us[1]).padStart(2,'0')}-${String(us[2]).padStart(2,'0')}`;
+  const named = text.match(/\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+(\d{1,2})(?:,|\s)\s*(20\d{2})/i);
+  if (named) {
+    const d = new Date(`${named[1]} ${named[2]}, ${named[3]}`);
+    if (!Number.isNaN(d.getTime())) return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+  return null;
+}
+function detectSportFromText(text) {
+  const t = text.toUpperCase();
+  if (/\bMLB\b|BASEBALL/.test(t)) return 'MLB';
+  if (/\bNFL\b|TOUCHDOWN|PASSING YARDS|RUSHING YARDS/.test(t)) return 'NFL';
+  if (/\bNHL\b|HOCKEY|SHOTS ON GOAL/.test(t)) return 'NHL';
+  if (/\bNBA\b|BASKETBALL|THREES|REBOUNDS/.test(t)) return 'NBA';
+  if (/SOCCER|PREMIER LEAGUE|LA LIGA|CHAMPIONS LEAGUE|GOALS?/.test(t)) return 'Soccer';
+  return 'MLB';
+}
+function parseOcrBetBlock(text, ocrConfidence) {
+  const lines = text.split(/\n+/).map(x => x.replace(/\s+/g,' ').trim()).filter(Boolean);
+  const lower = text.toLowerCase();
+  const outcome = /\b(lost|loss|losing)\b/.test(lower) ? 'loss' : /\b(push|void|refunded|refund)\b/.test(lower) ? 'push' : /\b(won|win|winner|settled.*won)\b/.test(lower) ? 'win' : 'win';
+  let stake = null, payout = null;
+  for (const line of lines) {
+    if (stake == null && /(wager|stake|bet amount|amount wagered)/i.test(line)) stake = parseMoneyValue(line);
+    if (payout == null && /(payout|return|returns|paid|total payout)/i.test(line) && !/potential/i.test(line)) payout = parseMoneyValue(line);
+  }
+  const oddsMatches = [...text.matchAll(/(^|\s)([+-]\d{3,4})\b/g)].map(m => Number(m[2])).filter(Number.isFinite);
+  const odds = oddsMatches.length ? oddsMatches[oddsMatches.length - 1] : null;
+  const date = parseOcrDate(text);
+  const type = /(parlay|same game parlay|sgp|\d+[- ]leg)/i.test(text) ? 'Balanced parlay' : /live bet|live wager/i.test(text) ? 'Live bet' : 'Straight';
+  const ignore = /(fanduel|sportsbook|settled|won|lost|loss|payout|return|returns|wager|stake|bet amount|cash out|potential|odds|bet id|receipt|share bet)/i;
+  const useful = lines.filter(l => l.length > 3 && !ignore.test(l) && !/^\$?[\d,.]+$/.test(l)).slice(0, 6);
+  const bet = useful.join(' · ').slice(0, 420) || (type === 'Straight' ? 'Review wager description' : 'Review parlay legs');
+  let actualProfit = null;
+  if (outcome === 'loss' && stake != null) actualProfit = -stake;
+  else if (outcome === 'push') actualProfit = 0;
+  else if (outcome === 'win' && payout != null && stake != null) actualProfit = payout - stake;
+  const uncertainFields = [];
+  if (!date) uncertainFields.push('date');
+  if (stake == null) uncertainFields.push('stake');
+  if (odds == null && actualProfit == null) uncertainFields.push('odds');
+  if (!useful.length) uncertainFields.push('bet');
+  const requiredScore = [date, stake != null, odds != null || actualProfit != null, useful.length > 0].filter(Boolean).length;
+  const confidence = Math.round(Math.max(0, Math.min(100, (Number(ocrConfidence || 0) * .65) + (requiredScore/4*35))));
+  return normalizeImportedBet({ date, sport:detectSportFromText(text), bet, stake, odds, outcome, type, actualProfit, confidence, uncertainFields });
+}
+function splitOcrIntoBetBlocks(text) {
+  const lines = String(text || '').split(/\n+/);
+  const starts = [];
+  lines.forEach((l,i) => { if (/^(wager|stake|bet amount|bet id|settled bet)/i.test(l.trim())) starts.push(i); });
+  if (starts.length < 2) return [text];
+  const blocks = [];
+  for (let i=0;i<starts.length;i++) {
+    const from = Math.max(0, starts[i]-5);
+    const to = i+1 < starts.length ? Math.max(from+1, starts[i+1]-2) : lines.length;
+    const block = lines.slice(from,to).join('\n').trim();
+    if (block.length > 20) blocks.push(block);
+  }
+  return blocks.length ? blocks.slice(0,12) : [text];
+}
+async function readResultWithAI() {
+  $('#resultImportError')?.classList.add('hidden');
+  $('#resultImportLoading')?.classList.remove('hidden');
+  if ($('#resultImportLoadingText')) $('#resultImportLoadingText').textContent = 'Using the low-cost AI fallback to read the screenshot…';
+  try {
+    const res = await fetch('/.netlify/functions/result-import', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ screenshotDataUrl: resultScreenshotDataUrl }) });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || 'Could not read the screenshot with AI.');
+    importedResultDraft = (data.bets || []).slice(0,12).map(normalizeImportedBet);
+    renderDraft(`${data.notes || ''}${data.notes ? ' ' : ''}AI fallback used. Review before saving.`);
+  } catch (e) { showImportError(e.message); }
+  finally {
+    $('#resultImportLoading')?.classList.add('hidden');
+    $('#readResultImageBtn').disabled = false;
+    if ($('#resultImportLoadingText')) $('#resultImportLoadingText').textContent = 'Reading the screenshot locally…';
+  }
+}
+async function readResultLocally() {
+  if (!window.Tesseract) throw new Error('Free OCR did not load. Reload the page or use the AI fallback.');
+  if ($('#resultImportLoadingText')) $('#resultImportLoadingText').textContent = 'Free local OCR is reading the screenshot…';
+  const worker = await window.Tesseract.createWorker('eng');
+  try {
+    const out = await worker.recognize(resultScreenshotFile || resultScreenshotDataUrl);
+    const text = String(out?.data?.text || '').trim();
+    const confidence = Number(out?.data?.confidence || 0);
+    if (!text) throw new Error('Local OCR could not find readable text.');
+    importedResultDraft = splitOcrIntoBetBlocks(text).map(parseText => parseOcrBetBlock(parseText, confidence));
+    const uncertain = importedResultDraft.some(x => Number(x.confidence || 0) < 75 || x.uncertainFields.length);
+    renderDraft(`Free local OCR · ${Math.round(confidence)}% text confidence. ${uncertain ? 'Some fields need review. AI fallback is available below if you want a second read.' : 'The main fields were read locally with no paid AI call.'}`);
+    const tools = document.createElement('div');
+    tools.className = 'ocr-tools';
+    tools.innerHTML = `<span class="ocr-free">✓ $0 OCR COMPLETE</span>${uncertain ? '<button id="aiFallbackBtn" class="ghost" type="button">Try AI fallback</button><span class="ocr-ai">Uses a small OpenAI API call</span>' : ''}<details class="ocr-raw"><summary>View raw OCR text</summary><pre>${esc(text)}</pre></details>`;
+    $('#resultImportDraft')?.prepend(tools);
+    $('#aiFallbackBtn')?.addEventListener('click', readResultWithAI);
+  } finally {
+    await worker.terminate();
+  }
+}
+
 $('#resultImage')?.addEventListener('change', async (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
+  resultScreenshotFile = file;
   $('#resultImportError')?.classList.add('hidden');
   try {
     resultScreenshotDataUrl = await compressImage(file);
@@ -215,13 +326,19 @@ $('#readResultImageBtn')?.addEventListener('click', async () => {
   $('#resultImportLoading')?.classList.remove('hidden');
   $('#readResultImageBtn').disabled = true;
   try {
-    const res = await fetch('/.netlify/functions/result-import', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ screenshotDataUrl: resultScreenshotDataUrl }) });
-    const data = await res.json();
-    if (!res.ok || !data.ok) throw new Error(data.error || 'Could not read the screenshot.');
-    importedResultDraft = (data.bets || []).slice(0,12).map(normalizeImportedBet);
-    renderDraft(data.notes || '');
-  } catch (e) { showImportError(e.message); }
-  finally { $('#resultImportLoading')?.classList.add('hidden'); $('#readResultImageBtn').disabled = false; }
+    await readResultLocally();
+  } catch (e) {
+    const box = $('#resultImportError');
+    if (box) {
+      box.innerHTML = `${esc(e.message)} <button id="ocrFailAiBtn" class="ghost" type="button">Use AI fallback</button>`;
+      box.classList.remove('hidden');
+      $('#ocrFailAiBtn')?.addEventListener('click', readResultWithAI);
+    }
+  } finally {
+    $('#resultImportLoading')?.classList.add('hidden');
+    $('#readResultImageBtn').disabled = false;
+    if ($('#resultImportLoadingText')) $('#resultImportLoadingText').textContent = 'Reading the screenshot locally…';
+  }
 });
 
 $('#resultForm')?.addEventListener('submit', () => setTimeout(renderResultsEnhanced, 0));
