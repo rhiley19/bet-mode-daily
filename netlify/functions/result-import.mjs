@@ -15,11 +15,11 @@ function normalizeBet(raw = {}) {
     date: typeof raw.date === "string" ? raw.date : null,
     sport: typeof raw.sport === "string" ? raw.sport : null,
     bet: typeof raw.bet === "string" ? raw.bet.slice(0, 500) : null,
-    stake: Number.isFinite(Number(raw.stake)) ? Number(raw.stake) : null,
-    odds: Number.isFinite(Number(raw.odds)) ? Math.trunc(Number(raw.odds)) : null,
+    stake: raw.stake !== null && raw.stake !== undefined && raw.stake !== "" && Number.isFinite(Number(raw.stake)) ? Number(raw.stake) : null,
+    odds: raw.odds !== null && raw.odds !== undefined && raw.odds !== "" && Number.isFinite(Number(raw.odds)) ? Math.trunc(Number(raw.odds)) : null,
     outcome,
     type: typeof raw.type === "string" ? raw.type : "Straight",
-    actualProfit: Number.isFinite(Number(raw.actualProfit)) ? Number(raw.actualProfit) : null,
+    actualProfit: raw.actualProfit !== null && raw.actualProfit !== undefined && raw.actualProfit !== "" && Number.isFinite(Number(raw.actualProfit)) ? Number(raw.actualProfit) : null,
     confidence: Number.isFinite(Number(raw.confidence)) ? Math.max(0, Math.min(100, Number(raw.confidence))) : null,
     uncertainFields: Array.isArray(raw.uncertainFields) ? raw.uncertainFields.map(String).slice(0, 8) : []
   };
