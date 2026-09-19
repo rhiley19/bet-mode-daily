@@ -32,16 +32,16 @@ function betName(m) {
 }
 
 function setView(view) {
-  $$$('.view').forEach((el) => el.classList.add('hidden'));
+  $('.view').forEach((el) => el.classList.add('hidden'));
   $(`#${view}View`)?.classList.remove('hidden');
-  $$$('.nav-tab').forEach((b) => b.classList.toggle('active', b.dataset.viewTarget === view));
+  $('.nav-tab').forEach((b) => b.classList.toggle('active', b.dataset.viewTarget === view));
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-$$$('[data-view-target]').forEach((btn) => btn.addEventListener('click', () => setView(btn.dataset.viewTarget)));
+$('[data-view-target]').forEach((btn) => btn.addEventListener('click', () => setView(btn.dataset.viewTarget)));
 
 function syncSportButtons() {
-  $$$('.sport').forEach((x) => x.classList.toggle('active', x.dataset.sport === sport));
+  $('.sport').forEach((x) => x.classList.toggle('active', x.dataset.sport === sport));
 }
 
 $$('.sport').forEach(btn => btn.addEventListener('click', () => {
@@ -465,7 +465,7 @@ function renderResults() {
     return `<tr><td>${esc(r.date)}</td><td><b>${esc(r.bet)}</b><small>${esc(r.sport)} · ${esc(r.type)}</small></td><td>${fmtMoney(r.stake)}</td><td>${fmtOdds(r.odds)}</td><td><span class="result-pill ${esc(r.outcome)}">${esc(r.outcome.toUpperCase())}</span></td><td class="${p > 0 ? 'profit' : p < 0 ? 'loss' : ''}">${p >= 0 ? '+' : ''}${fmtMoney(p)}</td><td><button class="delete-result" data-id="${esc(r.id)}" aria-label="Delete result">×</button></td></tr>`;
   }).join('')}</tbody></table>` : '<div class="no-history">No results saved yet. Start by recording one wager.</div>';
 
-  $$$('.delete-result').forEach(btn => btn.addEventListener('click', () => {
+  $('.delete-result').forEach(btn => btn.addEventListener('click', () => {
     saveResults(loadResults().filter(r => r.id !== btn.dataset.id));
     renderResults();
   }));
