@@ -12,7 +12,9 @@ export default async (req) => {
     const sport = String(url.searchParams.get("sport") || "MLB").toUpperCase();
     const date = url.searchParams.get("date") || torontoDate();
     const config = getSportConfig(sport);
-    const feed = await fetchTodaysMarkets(config, date);
+    const lowCreditMode = url.searchParams.get("mode") === "low";
+    const researchMode = url.searchParams.get("research") === "deep" ? "deep" : "quick";
+    const feed = await fetchTodaysMarkets(config, date, { lowCreditMode });
     const markets = feed.markets;
 
     if (!markets.length) {
@@ -24,6 +26,9 @@ export default async (req) => {
         generatedAt: new Date().toISOString(),
         latestMarketUpdate: feed.latestMarketUpdate,
         propMode: feed.propMode,
+        usageMode: feed.usageMode,
+        researchMode,
+        oddsQuota: feed.quota,
         summary: "No current pregame or in-play markets were returned for this slate.",
         candidates: [],
         rankings: {},
@@ -38,7 +43,9 @@ export default async (req) => {
       config,
       sport: config.label,
       date,
-      markets
+      markets,
+      researchMode,
+      extraContext: lowCreditMode ? "LOW CREDIT MODE is active. The market feed intentionally contains only moneylines. Do not imply spreads/totals were checked." : ""
     });
     const card = hydrateAnalysis(research.analysis, markets);
 
@@ -50,6 +57,8 @@ export default async (req) => {
       generatedAt: new Date().toISOString(),
       latestMarketUpdate: feed.latestMarketUpdate,
       propMode: feed.propMode,
+      usageMode: feed.usageMode,
+      researchMode,
       oddsQuota: feed.quota,
       priceNote: "Reference sportsbook prices can differ from FanDuel Canada. A FanDuel Ontario screenshot or pasted price overrides them.",
       ...card,
