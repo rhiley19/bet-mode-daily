@@ -94,3 +94,7 @@ Then open the local Netlify URL printed in the terminal.
 - Quick research uses lower reasoning and search context; Deep research remains optional.
 - Results screenshots use Tesseract.js locally in the browser first. OpenAI is only used when the user explicitly selects the AI fallback.
 - Bet Check skips the external odds request when the user supplies a FanDuel screenshot or visible American odds.
+
+
+### v3.1 polish release
+Production polish adds pre-click cost estimates, explicit cache/fresh-data behavior, actionable zero-credit fallbacks, filtered Results analytics with cumulative P/L, CSV export, and safer screenshot OCR review for uncertain fields.
