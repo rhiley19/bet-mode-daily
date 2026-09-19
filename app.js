@@ -44,7 +44,7 @@ function syncSportButtons() {
   $$('.sport').forEach((x) => x.classList.toggle('active', x.dataset.sport === sport));
 }
 
-$$$('.sport').forEach(btn => btn.addEventListener('click', () => {
+$$('.sport').forEach(btn => btn.addEventListener('click', () => {
   sport = btn.dataset.sport;
   localStorage.setItem("betmode:sport", sport);
   syncSportButtons();
