@@ -10,6 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 </head>
 <body>
   <div class="noise"></div>
@@ -77,8 +78,16 @@
           <div class="command-actions">
             <label class="input-shell"><span>Budget</span><b>$</b><input id="budget" type="number" min="0" step="5" value="50" inputmode="decimal"></label>
             <label class="select-shell"><span>Risk</span><select id="riskProfile"><option value="conservative">Conservative</option><option value="balanced" selected>Balanced</option><option value="aggressive">High variance</option></select></label>
+            <label class="select-shell"><span>Research</span><select id="researchMode"><option value="quick" selected>Quick / cheap</option><option value="deep">Deep research</option></select></label>
+            <label class="saver-toggle" title="Uses only the moneyline market, reducing a normal odds request from 3 credits to 1."><input id="lowCreditMode" type="checkbox"><span><b>Low Credit</b><small>1 market</small></span></label>
             <button id="generateBtn" class="primary">Generate card <span>→</span></button>
           </div>
+        </section>
+
+        <section class="usage-strip panel" id="usageStrip">
+          <div class="usage-copy"><span class="field-label">API USAGE</span><b id="quotaHeadline">Credits unknown</b><small id="quotaDetail">Generate once to read the provider's remaining-credit header. Cached cards do not spend credits.</small></div>
+          <div class="usage-meter"><span id="quotaBar"></span></div>
+          <div class="cache-status"><span id="cacheBadge" class="badge">CACHE READY</span><small id="cacheDetail">30-minute local cache</small></div>
         </section>
 
         <section id="loading" class="loading hidden">
@@ -90,7 +99,7 @@
 
         <section id="emptyState" class="empty-state">
           <div class="empty-icon">↗</div>
-          <div><strong>Your daily card appears here.</strong><p>Choose a sport and generate. If both API keys are configured, BET MODE can load the default sport automatically when you open the site.</p></div>
+          <div><strong>Your daily card appears here.</strong><p>Choose a sport and generate. BET MODE now loads a recent cached card first and does not spend API credits just because the site opened.</p></div>
         </section>
 
         <section id="card" class="hidden">
@@ -179,8 +188,8 @@
 
         <section class="panel result-import-panel">
           <div class="result-import-head">
-            <div><div class="eyebrow">SCREENSHOT IMPORT</div><h3>Log settled bets from a screenshot</h3><p>Upload a FanDuel bet-history or settled-slip screenshot. BET MODE reads the visible date, sport, wager, stake, odds and result, then shows an editable draft before anything is saved.</p></div>
-            <span class="badge">Review before save</span>
+            <div><div class="eyebrow">SCREENSHOT IMPORT</div><h3>Log settled bets from a screenshot</h3><p>Upload a FanDuel bet-history or settled-slip screenshot. BET MODE first reads the screenshot locally in your browser with free OCR. If the image is too messy, you can choose the AI fallback. Nothing is saved until you review it.</p></div>
+            <span class="badge">LOCAL OCR · $0 FIRST</span>
           </div>
           <div class="result-import-grid">
             <div>
@@ -191,9 +200,9 @@
               </label>
               <div class="check-actions">
                 <button id="clearResultImageBtn" class="ghost" type="button">Clear</button>
-                <button id="readResultImageBtn" class="primary" type="button">Read screenshot <span>→</span></button>
+                <button id="readResultImageBtn" class="primary" type="button">Read locally · free <span>→</span></button>
               </div>
-              <div id="resultImportLoading" class="mini-loading hidden"><div class="spinner"></div><span>Reading the settled wager…</span></div>
+              <div id="resultImportLoading" class="mini-loading hidden"><div class="spinner"></div><span id="resultImportLoadingText">Reading the screenshot locally…</span></div>
               <div id="resultImportError" class="error hidden"></div>
             </div>
             <div id="resultImportDraft" class="import-draft empty-import">
