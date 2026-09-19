@@ -84,3 +84,13 @@ Then open the local Netlify URL printed in the terminal.
 - Line-movement alerts.
 - A dedicated FanDuel Canada odds provider if/when one is available to you.
 - Optional login / private dashboard.
+
+
+## BET MODE v3 — cost controls
+- Opening the site no longer generates a card automatically.
+- Daily Cards are cached locally for 30 minutes; a fresh cached card uses zero new Odds API/OpenAI calls.
+- Low Credit Mode requests moneyline only, reducing a normal Odds API request from 3 markets to 1.
+- The dashboard stores and displays the Odds API `x-requests-remaining`, `x-requests-used`, and `x-requests-last` values. At 50 or fewer remaining credits it switches Low Credit Mode on automatically.
+- Quick research uses lower reasoning and search context; Deep research remains optional.
+- Results screenshots use Tesseract.js locally in the browser first. OpenAI is only used when the user explicitly selects the AI fallback.
+- Bet Check skips the external odds request when the user supplies a FanDuel screenshot or visible American odds.
