@@ -60,13 +60,19 @@ $('#riskProfile').addEventListener('change', () => {
   if (lastCard) renderStakePlan(lastCard);
 });
 $('#researchMode').value = localStorage.getItem('betmode:researchMode') || 'quick';
-$('#researchMode').addEventListener('change', () => localStorage.setItem('betmode:researchMode', $('#researchMode').value));
+$('#researchMode').addEventListener('change', () => {
+  localStorage.setItem('betmode:researchMode', $('#researchMode').value);
+  restoreCachedCard();
+  updateRunPreview();
+});
 $('#lowCreditMode').checked = localStorage.getItem('betmode:lowCreditMode') === 'true';
 function syncSaverToggle() { $('#lowCreditMode').closest('.saver-toggle')?.classList.toggle('active', $('#lowCreditMode').checked); }
 $('#lowCreditMode').addEventListener('change', () => {
   localStorage.setItem('betmode:lowCreditMode', String($('#lowCreditMode').checked));
   syncSaverToggle();
   updateQuotaUI(loadQuota());
+  restoreCachedCard();
+  updateRunPreview();
 });
 syncSaverToggle();
 
@@ -126,6 +132,9 @@ function restoreCachedCard() {
   if (!row) {
     $('#cacheBadge').textContent = 'NO CACHE';
     $('#cacheDetail').textContent = 'Generate once to save this mode';
+    $('#card').classList.add('hidden');
+    $('#emptyState').classList.remove('hidden');
+    updateRunPreview();
     return false;
   }
   const age = Date.now() - Number(row.savedAt || 0);
