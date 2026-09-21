@@ -427,7 +427,7 @@ async function callBetCheckModel({ config, prompt, imageDataUrl = null, useWeb =
 
   const content = [{ type: "input_text", text: prompt }];
   if (imageDataUrl) {
-    if (!/^data:image\\/(png|jpeg|jpg|webp);base64,/i.test(imageDataUrl)) {
+    if (!/^data:image\/(png|jpeg|jpg|webp);base64,/i.test(imageDataUrl)) {
       throw new Error("Screenshot must be PNG, JPEG or WebP.");
     }
     if (imageDataUrl.length > 4500000) throw new Error("Screenshot is too large after compression.");
