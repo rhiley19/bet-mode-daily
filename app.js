@@ -4,6 +4,7 @@ const $$ = (s) => [...document.querySelectorAll(s)];
 let sport = localStorage.getItem("betmode:sport") || "MLB";
 let lastCard = null;
 let screenshotDataUrl = null;
+let slipImageFile = null;
 let healthState = null;
 const CARD_CACHE_MS = 30 * 60 * 1000;
 
@@ -237,6 +238,29 @@ function renderStakePlan(card) {
   }).join('') + `<div class="stake-row unbet"><div><span>Unbet cash</span><b>Keep available unless a better price appears</b></div><strong>${fmtMoney(unbet)}</strong></div>`;
 }
 
+function renderDailySlip(card) {
+  const rows = (card.topThree || []).slice(0, 3);
+  const host = $('#dailySlipRows');
+  if (!host) return;
+  if (!rows.length) {
+    host.innerHTML = '<div class="generated-slip-empty">No ticket is being forced from this slate. That is a valid result.</div>';
+    $('#copyDailySlipBtn').disabled = true;
+    return;
+  }
+  host.innerHTML = rows.map((x, i) => `<div class="generated-slip-row"><span>${i + 1}</span><div><b>${esc(betName(x))}</b><small>${esc(x.game || '')}</small></div><strong>${fmtOdds(x.odds)}</strong></div>`).join('');
+  $('#copyDailySlipBtn').disabled = false;
+  $('#copyDailySlipBtn').onclick = async () => {
+    const text = rows.map((x, i) => `${i + 1}. ${betName(x)} ${fmtOdds(x.odds)}`).join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      $('#copyDailySlipBtn').textContent = 'Copied ✓';
+      setTimeout(() => { $('#copyDailySlipBtn').textContent = 'Copy slip'; }, 1200);
+    } catch {
+      $('#copyDailySlipBtn').textContent = 'Copy failed';
+    }
+  };
+}
+
 function render(card, { cached = false, cacheAgeMs = 0 } = {}) {
   lastCard = card;
   $('#emptyState').classList.add('hidden');
@@ -265,6 +289,7 @@ function render(card, { cached = false, cacheAgeMs = 0 } = {}) {
     rankCard('👤 BEST PROP', r.bestPlayerProp),
     rankCard('＋ BEST PLUS-MONEY', r.bestPlusMoney)
   ].join('');
+  renderDailySlip(card);
 
   $('#candidateRows').innerHTML = (card.candidates || []).map(c => `<tr>
     <td><div class="table-bet"><b>${esc(betName(c))}</b><small>${esc(c.game || '')}</small></div></td>
@@ -403,6 +428,7 @@ async function compressImage(file) {
 $('#slipImage').addEventListener('change', async (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
+  slipImageFile = file;
   $('#checkError').classList.add('hidden');
   try {
     screenshotDataUrl = await compressImage(file);
@@ -418,6 +444,7 @@ $('#slipImage').addEventListener('change', async (e) => {
 
 $('#clearSlipBtn').addEventListener('click', () => {
   screenshotDataUrl = null;
+  slipImageFile = null;
   $('#slipImage').value = '';
   $('#slipText').value = '';
   $('#imagePreview').src = '';
@@ -428,15 +455,101 @@ $('#clearSlipBtn').addEventListener('click', () => {
   $('#checkError').classList.add('hidden');
 });
 
+function parseLocalSlipText(text) {
+  const lines = String(text || '')
+    .split(/\n+/)
+    .map(x => x.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .filter(x => !/^(fanduel|sportsbook|bet slip|share bet|receipt|wager|potential payout|total wager)$/i.test(x));
+  const items = [];
+  const seen = new Set();
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const m = line.match(/(?:^|\s)([+-]\d{3,4})\b/);
+    if (!m) continue;
+    let bet = line.replace(/(?:^|\s)[+-]\d{3,4}\b/, '').trim();
+    if (bet.length < 4 && i > 0) bet = lines[i - 1];
+    if (!bet || seen.has(bet.toLowerCase())) continue;
+    seen.add(bet.toLowerCase());
+    items.push({ bet: bet.slice(0, 300), odds: m[1] });
+  }
+  if (!items.length) {
+    for (const line of lines) {
+      if (line.length < 5 || /^\$?[\d,.]+$/.test(line)) continue;
+      if (seen.has(line.toLowerCase())) continue;
+      seen.add(line.toLowerCase());
+      items.push({ bet: line.slice(0, 300), odds: 'unknown' });
+      if (items.length >= 8) break;
+    }
+  }
+  return items.slice(0, 12);
+}
+
+function slipTextForCopy(items) {
+  return (items || []).map((x, i) => `${i + 1}. ${x.bet}${x.odds && x.odds !== 'unknown' ? ` ${x.odds}` : ''}`).join('\n');
+}
+
+function wireSlipCopy(items, buttonId = 'copyCheckedSlipBtn') {
+  const btn = $(`#${buttonId}`);
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(slipTextForCopy(items));
+      btn.textContent = 'Copied ✓';
+      setTimeout(() => { btn.textContent = 'Copy slip'; }, 1200);
+    } catch {
+      btn.textContent = 'Copy failed';
+    }
+  });
+}
+
+function renderSlipOnly(items, status = 'SLIP EXTRACTED', note = '') {
+  const safeItems = items?.length ? items : [{ bet: 'Uploaded bet slip', odds: 'unknown' }];
+  $('#checkResult').innerHTML = `
+    <section class="panel bet-slip-output">
+      <div class="bet-slip-output-head">
+        <div><div class="eyebrow">BET SLIP</div><h2>Your ticket</h2><p>${esc(note || 'Slip extracted. Research is loading next.')}</p></div>
+        <div class="bet-slip-output-actions"><span class="badge">${esc(status)}</span><button id="copyCheckedSlipBtn" class="ghost" type="button">Copy slip</button></div>
+      </div>
+      <div class="bet-slip-lines">${safeItems.map((item, i) => `<div class="bet-slip-line"><span>${i + 1}</span><b>${esc(item.bet)}</b><strong>${esc(item.odds || 'unknown')}</strong></div>`).join('')}</div>
+    </section>`;
+  $('#checkResult').classList.remove('hidden');
+  wireSlipCopy(safeItems);
+}
+
+async function ocrSlipImage() {
+  if (!slipImageFile || !window.Tesseract) return '';
+  const worker = await window.Tesseract.createWorker('eng');
+  try {
+    const out = await worker.recognize(slipImageFile);
+    return String(out?.data?.text || '').trim();
+  } finally {
+    await worker.terminate();
+  }
+}
+
 function verdictClass(v) {
   const x = String(v || '').toUpperCase();
-  return x === 'KEEP' ? 'keep' : x === 'REMOVE' ? 'remove' : 'replace';
+  return x === 'KEEP' ? 'keep' : x === 'REMOVE' ? 'remove' : x === 'REPLACE' ? 'replace' : 'review';
 }
 
 function renderBetCheck(data) {
   const r = data.result || {};
-  const legs = r.legs || [];
+  const legs = Array.isArray(r.legs) ? r.legs : [];
+  const extracted = Array.isArray(r.extractedSlip) && r.extractedSlip.length
+    ? r.extractedSlip
+    : legs.map(x => ({ bet: x.bet || 'Leg', odds: x.odds || 'unknown' }));
+  const mode = data.analysisMode === 'deep' ? 'DEEP RESEARCH' : data.degraded ? 'FALLBACK' : 'FAST CHECK';
+
   $('#checkResult').innerHTML = `
+    <section class="panel bet-slip-output ${data.degraded ? 'degraded' : ''}">
+      <div class="bet-slip-output-head">
+        <div><div class="eyebrow">BET SLIP</div><h2>Your ticket</h2><p>${data.degraded ? 'The ticket was preserved even though full research was unavailable.' : 'Ticket extracted first. Analysis is shown below.'}</p></div>
+        <div class="bet-slip-output-actions"><span class="badge">${esc(mode)}</span><button id="copyCheckedSlipBtn" class="ghost" type="button">Copy slip</button></div>
+      </div>
+      <div class="bet-slip-lines">${extracted.map((item, i) => `<div class="bet-slip-line"><span>${i + 1}</span><b>${esc(item.bet || 'Unreadable leg')}</b><strong>${esc(item.odds || 'unknown')}</strong></div>`).join('')}</div>
+    </section>
+    ${data.degraded ? `<div class="warning">Research degraded: ${esc(data.engineWarning || 'The research engine was unavailable. The extracted slip is still usable for review.')}</div>` : ''}
     <section class="check-summary panel">
       <div class="check-summary-top"><div><div class="eyebrow">BET CHECK RESULT</div><h2>${esc(r.summary || 'Slip analysis')}</h2></div><span class="badge">${legs.length} leg${legs.length === 1 ? '' : 's'}</span></div>
       <div class="weakest"><span>WEAKEST LEG</span><b>${esc(r.weakestLeg || 'None identified')}</b></div>
@@ -445,46 +558,89 @@ function renderBetCheck(data) {
     <div class="leg-grid">
       ${legs.map((leg, i) => `<article class="leg-card">
         <div class="leg-top"><span>LEG ${i+1}</span><b class="verdict ${verdictClass(leg.verdict)}">${esc(leg.verdict || 'REVIEW')}</b></div>
-        <h3>${esc(leg.bet)}</h3>
+        <h3>${esc(leg.bet || 'Unreadable leg')}</h3>
         <div class="leg-meta"><span>${esc(leg.odds || 'Odds unknown')}</span><span>${esc(String(leg.confidence ?? '—'))}/10 confidence</span></div>
         <p>${esc(leg.why || '')}</p>
         <div class="leg-risk"><b>Main risk</b><span>${esc(leg.mainRisk || 'Unspecified')}</span></div>
         <div class="price-note">${esc(leg.priceNote || '')}</div>
       </article>`).join('')}
     </div>
-    <section class="panel recommendation"><div class="eyebrow">RECOMMENDATION</div><h3>${esc(r.recommendation || 'No recommendation returned.')}</h3>${(r.warnings || []).length ? `<ul>${r.warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul>` : ''}</section>
-    <section class="sources panel"><div class="source-head"><div><div class="eyebrow">RESEARCH TRAIL</div><h3>Sources checked</h3></div><span class="badge">${(data.sources || []).length} sources</span></div><div class="source-links">${(data.sources || []).map(s => `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title || s.url)}<b>↗</b></a>`).join('') || '<span class="no-sources">No web citations returned.</span>'}</div></section>`;
+    <section class="panel recommendation"><div class="eyebrow">RECOMMENDATION</div><h3>${esc(r.recommendation || 'Review the extracted ticket before placing it.')}</h3>${(r.warnings || []).length ? `<ul>${r.warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul>` : ''}</section>
+    <section class="sources panel"><div class="source-head"><div><div class="eyebrow">RESEARCH TRAIL</div><h3>Sources checked</h3></div><span class="badge">${(data.sources || []).length} sources</span></div><div class="source-links">${(data.sources || []).map(src => `<a href="${esc(src.url)}" target="_blank" rel="noopener">${esc(src.title || src.url)}<b>↗</b></a>`).join('') || '<span class="no-sources">Fast/fallback mode may not include live web sources.</span>'}</div></section>`;
   $('#checkResult').classList.remove('hidden');
+  wireSlipCopy(extracted);
 }
 
-$('#checkBtn').addEventListener('click', async () => {
-  const slipText = $('#slipText').value.trim();
+async function runBetCheck() {
+  let slipText = $('#slipText').value.trim();
   if (!slipText && !screenshotDataUrl) {
     $('#checkError').textContent = 'Upload a screenshot or paste the slip first.';
     $('#checkError').classList.remove('hidden');
     return;
   }
+
   $('#checkError').classList.add('hidden');
-  $('#checkResult').classList.add('hidden');
   $('#checkLoading').classList.remove('hidden');
   $('#checkBtn').disabled = true;
+
   try {
-    const res = await fetch('/api/bet-check', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ sport, slipText, screenshotDataUrl })
-    });
+    if (!slipText && slipImageFile) {
+      $('#checkLoading .loading-copy span').textContent = 'Reading the slip locally first…';
+      try {
+        const localText = await ocrSlipImage();
+        if (localText) {
+          slipText = localText;
+          $('#slipText').value = localText;
+          renderSlipOnly(parseLocalSlipText(localText), 'LOCAL OCR', 'Slip extracted locally. Research is loading now.');
+        } else {
+          renderSlipOnly([{ bet: 'Screenshot uploaded', odds: 'unknown' }], 'IMAGE READY', 'Local OCR could not read the text. The image will be sent to the fallback analyzer.');
+        }
+      } catch {
+        renderSlipOnly([{ bet: 'Screenshot uploaded', odds: 'unknown' }], 'IMAGE READY', 'Local OCR failed. The image will be sent to the fallback analyzer.');
+      }
+    } else if (slipText) {
+      renderSlipOnly(parseLocalSlipText(slipText), 'SLIP READY', 'Slip parsed locally. Research is loading now.');
+    }
+
+    $('#checkLoading .loading-copy span').textContent = $('#deepSlipResearch').checked
+      ? 'Slip produced. Running current web research on the legs…'
+      : 'Slip produced. Running the fast structured check…';
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 26000);
+    let res;
+    try {
+      res = await fetch('/api/bet-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          sport,
+          slipText,
+          screenshotDataUrl: slipText ? null : screenshotDataUrl,
+          deepResearch: $('#deepSlipResearch').checked
+        })
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+
     const data = await res.json();
     if (!res.ok || !data.ok) throw new Error(data.error || 'Bet check failed.');
     renderBetCheck(data);
-  } catch(e) {
-    $('#checkError').textContent = e.message;
+  } catch (e) {
+    const message = e?.name === 'AbortError' ? 'Research timed out. Your extracted slip is still shown above.' : e.message;
+    $('#checkError').textContent = message;
     $('#checkError').classList.remove('hidden');
+    $('#checkResult').classList.remove('hidden');
   } finally {
     $('#checkLoading').classList.add('hidden');
     $('#checkBtn').disabled = false;
+    $('#checkLoading .loading-copy span').textContent = 'Extracting the ticket first, then analyzing the legs…';
   }
-});
+}
+
+$('#checkBtn').addEventListener('click', runBetCheck);
 
 function americanProfit(stake, odds, outcome) {
   if (outcome === 'push') return 0;
