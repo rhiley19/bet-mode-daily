@@ -378,46 +378,177 @@ Do not manufacture precision. estimatedProbability may be null if evidence is in
   return callResearch({ config, prompt, researchMode });
 }
 
-export async function runBetCheckResearch({ config, sport, date, markets, slipText = "", imageDataUrl = null }) {
-  const slimMarkets = markets.slice(0, 240);
-  const prompt = `You are BET CHECK for a disciplined Ontario sports bettor.
 
-Sport context: ${sport}
-Date in America/Toronto: ${date}
-The user may provide pasted slip text, a FanDuel Canada screenshot, or both. If a screenshot is present, read every visible leg and its displayed price carefully. Treat visible FanDuel Canada prices as authoritative for the user's wager. Do not invent unreadable text or odds.
+const BET_CHECK_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    summary: { type: "string" },
+    extractedSlip: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          bet: { type: "string" },
+          odds: { type: "string" }
+        },
+        required: ["bet", "odds"]
+      }
+    },
+    legs: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          bet: { type: "string" },
+          odds: { type: "string" },
+          verdict: { type: "string", enum: ["KEEP", "REPLACE", "REMOVE", "REVIEW"] },
+          confidence: { type: "number" },
+          why: { type: "string" },
+          mainRisk: { type: "string" },
+          priceNote: { type: "string" }
+        },
+        required: ["bet", "odds", "verdict", "confidence", "why", "mainRisk", "priceNote"]
+      }
+    },
+    weakestLeg: { type: "string" },
+    combinedRisk: { type: "string" },
+    recommendation: { type: "string" },
+    warnings: { type: "array", items: { type: "string" } }
+  },
+  required: ["summary", "extractedSlip", "legs", "weakestLeg", "combinedRisk", "recommendation", "warnings"]
+};
 
-PASTED SLIP TEXT:
-${slipText || "(none)"}
+async function callBetCheckModel({ config, prompt, imageDataUrl = null, useWeb = false, timeoutMs = 12000 }) {
+  const openaiKey = process.env.OPENAI_API_KEY;
+  if (!openaiKey) throw new Error("OPENAI_API_KEY is not configured.");
 
-CURRENT REFERENCE MARKET FEED:
-${JSON.stringify(slimMarkets)}
-
-For each leg: research current injuries, lineups, starters, recent usage/performance and matchup context as relevant. Compare the user's price with the reference feed only when the same market can be matched. Never pretend a reference price is FanDuel Canada. Identify the weakest leg. Explain correlation, contradiction, redundancy and combined risk. Recommend KEEP / REPLACE / REMOVE for every leg. If the screenshot is unclear, say which field is uncertain instead of guessing.
-
-Return ONLY valid JSON in this exact shape:
-{
-  "summary": "short overall assessment",
-  "extractedSlip": [
-    {"bet": "exact visible/pasted leg", "odds": "visible odds or unknown"}
-  ],
-  "legs": [
-    {
-      "bet": "leg",
-      "odds": "price",
-      "verdict": "KEEP or REPLACE or REMOVE",
-      "confidence": 7,
-      "why": "evidence-based assessment",
-      "mainRisk": "main risk",
-      "priceNote": "price comparison or unable to verify"
+  const content = [{ type: "input_text", text: prompt }];
+  if (imageDataUrl) {
+    if (!/^data:image\\/(png|jpeg|jpg|webp);base64,/i.test(imageDataUrl)) {
+      throw new Error("Screenshot must be PNG, JPEG or WebP.");
     }
-  ],
-  "weakestLeg": "leg name or none",
-  "combinedRisk": "concise combined-ticket risk/correlation explanation",
-  "recommendation": "what to keep, replace, remove; do not chase payout",
-  "warnings": ["uncertainty or price warning"]
-}`;
+    if (imageDataUrl.length > 4500000) throw new Error("Screenshot is too large after compression.");
+    content.push({ type: "input_image", image_url: imageDataUrl, detail: "high" });
+  }
 
-  return callResearch({ config, prompt, imageDataUrl });
+  const body = {
+    model: process.env.OPENAI_MODEL || "gpt-5.6-luna",
+    reasoning: { effort: "low" },
+    text: {
+      verbosity: "low",
+      format: {
+        type: "json_schema",
+        name: "bet_check",
+        strict: true,
+        schema: BET_CHECK_SCHEMA
+      }
+    },
+    input: [{ role: "user", content }]
+  };
+
+  if (useWeb) {
+    body.tools = [{
+      type: "web_search",
+      filters: { allowed_domains: sourceDomains(config) },
+      search_context_size: "low"
+    }];
+    body.tool_choice = "auto";
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let res;
+  try {
+    res = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + openaiKey,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal
+    });
+  } catch (error) {
+    if (error && error.name === "AbortError") throw new Error("Bet Check research timed out.");
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error("Bet Check engine error " + res.status + ": " + txt.slice(0, 300));
+  }
+
+  const response = await res.json();
+  return {
+    analysis: parseJsonLoose(extractOutputText(response)),
+    sources: extractCitations(response)
+  };
+}
+
+export async function runBetCheckResearch({
+  config,
+  sport,
+  date,
+  markets,
+  slipText = "",
+  imageDataUrl = null,
+  deepResearch = false
+}) {
+  const slimMarkets = markets.slice(0, 160);
+  const prompt = [
+    "You are BET CHECK for a disciplined Ontario sports bettor.",
+    "",
+    "Sport context: " + sport,
+    "Date in America/Toronto: " + date,
+    "The user may provide pasted slip text, a screenshot, or both. The user's visible/pasted FanDuel Canada price is authoritative. Never invent unreadable text or odds.",
+    "",
+    "PASTED / OCR SLIP TEXT:",
+    slipText || "(none)",
+    "",
+    "CURRENT REFERENCE MARKET FEED:",
+    JSON.stringify(slimMarkets),
+    "",
+    "First, faithfully reconstruct the bet slip. Then assess every leg. When current reference markets are supplied, compare matching prices carefully. If no current reference market exists, say that price verification is unavailable.",
+    "Use KEEP / REPLACE / REMOVE only when justified. Use REVIEW when evidence is insufficient. Identify the weakest leg, ticket correlation/redundancy, and combined risk. Never call a bet guaranteed or a lock."
+  ].join("\\n");
+
+  const base = await callBetCheckModel({
+    config,
+    prompt: prompt + "\\n\\nThis is the reliable base pass. Do not claim current injury/news verification unless it is present in the supplied reference feed. Focus on accurate extraction, ticket structure, visible prices, and conservative uncertainty.",
+    imageDataUrl,
+    useWeb: false,
+    timeoutMs: 12000
+  });
+
+  if (!deepResearch) {
+    base.analysis.warnings = [
+      ...(base.analysis.warnings || []),
+      "Fast mode completed. Current news/injuries were not independently web-verified."
+    ];
+    return { ...base, mode: "fast" };
+  }
+
+  try {
+    const deep = await callBetCheckModel({
+      config,
+      prompt: prompt + "\\n\\nUse web search to verify current injuries, lineups, starters, roles, recent form, and matchup context for the visible legs. Keep the exact extracted slip and user prices intact. If a current fact cannot be verified, state the uncertainty rather than guessing.",
+      imageDataUrl: null,
+      useWeb: true,
+      timeoutMs: 14000
+    });
+    return { ...deep, mode: "deep" };
+  } catch (error) {
+    base.analysis.warnings = [
+      ...(base.analysis.warnings || []),
+      "Deep research was unavailable, so the reliable base analysis is shown instead: " + error.message
+    ];
+    return { ...base, mode: "fast-fallback" };
+  }
 }
 
 export function hydrateAnalysis(analysis, markets) {
