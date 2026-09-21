@@ -133,6 +133,14 @@
 
           <div class="rank-grid" id="rankGrid"></div>
 
+          <section id="dailySlipPanel" class="panel generated-slip">
+            <div class="generated-slip-head">
+              <div><div class="eyebrow">BET SLIP</div><h3>Suggested ticket from this card</h3><p>Built from the highest-priority selections that actually cleared the filter. Verify every FanDuel Canada price before placing.</p></div>
+              <button id="copyDailySlipBtn" class="ghost" type="button">Copy slip</button>
+            </div>
+            <div id="dailySlipRows" class="generated-slip-rows"></div>
+          </section>
+
           <section class="stake-panel panel" id="stakePanel">
             <div class="stake-head"><div><div class="eyebrow">BUDGET PLAN</div><h3 id="stakeTitle">Recommended allocation</h3></div><div class="stake-total" id="stakeTotal">$0</div></div>
             <div id="stakeRows" class="stake-rows"></div>
@@ -172,7 +180,8 @@
             </label>
             <div class="divider"><span>OR</span></div>
             <label class="text-field"><span>PASTE SLIP TEXT</span><textarea id="slipText" placeholder="Blue Jays ML -125&#10;Vladimir Guerrero Jr. 1+ hit -270&#10;Game total over 8.5 -110"></textarea></label>
-            <div class="check-actions"><button id="clearSlipBtn" class="ghost">Clear</button><button id="checkBtn" class="primary">Analyze slip <span>→</span></button></div>
+            <label class="deep-check-toggle"><input id="deepSlipResearch" type="checkbox"><span><b>Deep current research</b><small>Optional · verifies current injuries, starters and form. Fast mode produces the slip first.</small></span></label>
+            <div class="check-actions"><button id="clearSlipBtn" class="ghost">Clear</button><button id="checkBtn" class="primary">Build + analyze slip <span>→</span></button></div>
           </div>
 
           <div class="panel check-guide">
@@ -186,7 +195,7 @@
           </div>
         </section>
 
-        <section id="checkLoading" class="loading hidden"><div class="spinner"></div><div class="loading-copy"><strong>Checking your slip</strong><span>Reading the ticket and researching every leg…</span></div></section>
+        <section id="checkLoading" class="loading hidden"><div class="spinner"></div><div class="loading-copy"><strong>Checking your slip</strong><span>Extracting the ticket first, then analyzing the legs…</span></div></section>
         <section id="checkError" class="error hidden"></section>
         <section id="checkResult" class="hidden"></section>
       </section>
