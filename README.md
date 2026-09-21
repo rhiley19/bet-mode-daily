@@ -98,3 +98,7 @@ Then open the local Netlify URL printed in the terminal.
 
 ### v3.1 polish release
 Production polish adds pre-click cost estimates, explicit cache/fresh-data behavior, actionable zero-credit fallbacks, filtered Results analytics with cumulative P/L, CSV export, and safer screenshot OCR review for uncertain fields.
+
+
+### Bet Check reliability fix
+Bet Check now renders an extracted slip before research, uses structured JSON for analysis, times out safely, and returns a fallback slip when research or pricing services fail.
