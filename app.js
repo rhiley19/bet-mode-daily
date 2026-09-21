@@ -381,7 +381,7 @@ async function generate({ force = false } = {}) {
           ${!$('#lowCreditMode').checked ? '<button class="ghost" type="button" id="enableLowCreditBtn">Enable Low Credit</button>' : ''}
         </div>
       </div>`;
-      $('[data-fallback-view]').forEach(btn => btn.addEventListener('click', () => setView(btn.dataset.fallbackView)));
+      $$('[data-fallback-view]').forEach(btn => btn.addEventListener('click', () => setView(btn.dataset.fallbackView)));
       $('#enableLowCreditBtn')?.addEventListener('click', () => {
         $('#lowCreditMode').checked = true;
         localStorage.setItem('betmode:lowCreditMode','true');
