@@ -1,0 +1,18 @@
+{
+  "name": "BET MODE DAILY",
+  "short_name": "BET MODE",
+  "description": "Ontario sports betting research and results tracker",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#07110c",
+  "theme_color": "#07110c",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
